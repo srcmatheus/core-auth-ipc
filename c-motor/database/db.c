@@ -3,13 +3,19 @@
 #include <mysql/mysql.h>
 
 #include "protocol.h"
+#include "config.h"
 
 static MYSQL *global_connection = NULL;
 
-void db_init(void){
+void db_init(db_config_t *config){
     global_connection = mysql_init(NULL);
 
-    if(mysql_real_connect(global_connection, "localhost", "usuario", "senha", "nome_do_banco_de_dados", 0, NULL, 0) == NULL){
+    if(mysql_real_connect(global_connection, config->host,
+                                             config->user,
+                                             config->pass,
+                                             config->db_name,
+                                             0, NULL, 0) == NULL){
+                                                
         fprintf(stderr, "Failed to connect to the database: %s ", mysql_error(global_connection));
         exit(1);
     }
