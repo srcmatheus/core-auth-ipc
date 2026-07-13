@@ -13,7 +13,7 @@ void config_init(db_config_t * config){
     if(config->user == NULL) config->user = "root";
 
     if(config->db_name == NULL){
-        fprintf(stderr, "Fatal error: The DB_PASS variable was not defined in the environment.\n");
+        fprintf(stderr, "Fatal error: The DB_NAME variable was not defined in the environment.\n");
         exit(1);
     }
 

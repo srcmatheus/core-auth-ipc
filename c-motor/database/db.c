@@ -1,8 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <mysql/mysql.h>
 
-#include "protocol.h"
+#include "../protocol.h"
 #include "config.h"
 
 static MYSQL *global_connection = NULL;

@@ -1,6 +1,9 @@
 CC = gcc
-CFLAGS = -Wall -Wextra
+CFLAGS = -g -Wall -Wextra
 TARGET = exe
+
+LIBS = $(shell mysql_config --libs)
+CFLAGS += $(shell mysql_config --cflags)
 
 -include .env
 
@@ -12,12 +15,12 @@ export DB_PASS
 all: $(TARGET)
 
 $(TARGET): main.c database/db.c database/config.c
-	@$(CC) $(CFLAGS) $^ -o $(TARGET)
+	@$(CC) $(CFLAGS) $^ -o $(TARGET) $(LIBS)
 
 run: all
-	@ifndef DB_PASS
-		$(error The .env file has not been configured. Copy .env.example and fill in your credentials.)
-	@endif
+ifndef DB_PASS
+	$(error O arquivo .env nao foi configurado ou DB_PASS esta vazio.)
+endif
 	@./$(TARGET)
 
 clean:

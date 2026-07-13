@@ -1,7 +1,7 @@
 #ifndef DB_H
 #define DB_H
 
-#include "protocol.h"
+#include "../protocol.h"
 #include "config.h"
 
 void db_init(db_config_t *config);
