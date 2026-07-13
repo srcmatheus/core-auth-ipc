@@ -9,15 +9,12 @@ void config_init(db_config_t * config){
     config->db_name = getenv("DB_NAME");
     config->pass = getenv("DB_PASS");
 
-    if(config->host == NULL) config->host = "localhost";
-    if(config->user == NULL) config->user = "root";
+    if(config->host == NULL || config->host[0] == '\0') config->host = "localhost";
+    if(config->user == NULL || config->user[0] == '\0') config->user = "root";
 
-    if(config->db_name == NULL){
-        fprintf(stderr, "Fatal error: The DB_NAME variable was not defined in the environment.\n");
-        exit(1);
-    }
+    if(config->db_name == NULL || config->db_name[0] == '\0') config->db_name = "core_auth_database";
 
-    if(config->pass == NULL){
+    if(config->pass == NULL || config->pass[0] == '\0'){
         fprintf(stderr, "Fatal error: The DB_PASS variable was not defined in the environment.\n");
         exit(1);
     }

@@ -19,7 +19,7 @@ $(TARGET): main.c database/db.c database/config.c
 
 run: all
 ifndef DB_PASS
-	$(error O arquivo .env nao foi configurado ou DB_PASS esta vazio.)
+	$(error The .env file has not been configured. Copy .env.example and fill in your credentials.)
 endif
 	@./$(TARGET)
 
