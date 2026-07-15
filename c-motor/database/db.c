@@ -37,11 +37,15 @@ void db_init(const db_config_t *config){
         exit(1);
     }
 
+    if(mysql_query(global_connection, "SET GLOBAL innodb_flush_log_at_trx_commit = 2;")){
+        fprintf(stderr, "It was not possible to set the InnoDB flush optimization: %s\n", mysql_error(global_connection));
+    }
+
     if(mysql_query(global_connection, "CREATE TABLE IF NOT EXISTS users (\
                                                     id INT AUTO_INCREMENT PRIMARY KEY,\
                                                     name VARCHAR(100) NOT NULL,\
                                                     email VARCHAR(100) UNIQUE NOT NULL,\
-                                                    access_level TINYINT UNSIGNED NOT NULL DEFAULT 0)")){
+                                                    access_level TINYINT UNSIGNED NOT NULL DEFAULT 0) ENGINE=InnoDB")){
         
         fprintf(stderr, "Table creation failed: %s\n", mysql_error(global_connection));
         exit(1);
