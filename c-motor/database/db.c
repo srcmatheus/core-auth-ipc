@@ -16,7 +16,10 @@ void db_init(const db_config_t *config){
     if(mysql_real_connect(global_connection, config->host,
                                              config->user,
                                              config->pass,
-                                             NULL, 0, NULL, 0) == NULL){
+                                             NULL,
+                                             config->port,
+                                             NULL,
+                                             0) == NULL){
                                                 
         fprintf(stderr, "Failed to connect to the database: %s", mysql_error(global_connection));
         exit(1);

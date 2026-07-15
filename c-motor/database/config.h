@@ -3,6 +3,7 @@
 
 typedef struct {
     const char *host;
+    const char *port;
     const char *user;
     const char *pass;
     const char *db_name;
