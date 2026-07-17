@@ -11,14 +11,16 @@ int main(){
 
     db_config_t config = {0};
     user_protocol_t user = {0};
+    user_data_t user_data = {0};
 
     int opcao = 0;
+    char nome[100] = {0};
 
     config_init(&config);
     db_init(&config);
 
     printf("\n=== CoreAuth IPC - Modo de Teste Local ===\n");
-    printf("1 - Inserir usuário | 2 - Sair\n");
+    printf("1 - Inserir usuário | 2 - Exibir | 5 - Sair\n");
 
     while(1){
         printf("\nDigite uma opção: ");
@@ -41,6 +43,24 @@ int main(){
                 while(getchar() != '\n');
                 break;
             case 2:
+                while(getchar() != '\n');
+                printf("Digite o nome do usuário que deseja encontrar: ");
+                fgets(nome, sizeof(nome), stdin);
+                nome[strcspn(nome, "\n")] = '\0';
+
+                if(db_find_user(&user_data, nome) == 1){
+                    printf("\nUsuário não encontrado...");
+                    printf("\n==========================================\n");
+                    break;
+                }
+
+                printf("\nResultado ================================\n");
+                printf("\nID: %d\n", user_data.id);
+                printf("Nome completo: %s\n", user_data.full_name);
+                printf("E-mail: %s\n", user_data.email);
+                printf("\n==========================================\n");
+                break;
+            case 5:
                 printf("Encerrando programa...\n");
                 db_close();
                 exit(0);
