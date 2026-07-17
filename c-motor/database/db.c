@@ -109,3 +109,85 @@ int db_insert_user(const user_protocol_t *user){
     return 0;
 
 }
+
+int db_find_user(user_data_t *user, char *search_name){
+
+    MYSQL_STMT *stmt_user = mysql_stmt_init(global_connection);
+
+    if(stmt_user == NULL){
+        fprintf(stderr, "Error connecting to the database: %s\n", mysql_error(global_connection));
+        return -1;
+    }
+
+    const char query[] = "SELECT id, name, email FROM users WHERE name = ?";
+    unsigned long length = strlen(query);
+    unsigned long len_search_name = strlen(search_name);
+
+    MYSQL_BIND bind_query[1];
+    memset(bind_query, 0, sizeof(bind_query));
+
+    bind_query[0].buffer_type = MYSQL_TYPE_STRING;
+    bind_query[0].buffer_length = len_search_name;
+    bind_query[0].length = &len_search_name;
+    bind_query[0].buffer = search_name;
+
+    if(mysql_stmt_prepare(stmt_user, query, length)){
+        fprintf(stderr, "Error during preparation: %s\n", mysql_stmt_error(stmt_user));
+        mysql_stmt_close(stmt_user);
+        return -1;
+    }
+
+    if(mysql_stmt_bind_param(stmt_user, bind_query)){
+        fprintf(stderr, "Bind error: %s\n", mysql_stmt_error(stmt_user));
+        mysql_stmt_close(stmt_user);
+        return -1;
+    }
+
+    if(mysql_stmt_execute(stmt_user)){
+        fprintf(stderr, "Error executing query: %s\n", mysql_stmt_error(stmt_user));
+        mysql_stmt_close(stmt_user);
+        return -1;
+    }
+
+    MYSQL_BIND bind_data[3];
+    memset(bind_data, 0, sizeof(bind_data));
+
+    bind_data[0].buffer_type = MYSQL_TYPE_LONG;
+    bind_data[0].buffer_length = sizeof(user->id);
+    bind_data[0].buffer = &(user->id);
+
+    bind_data[1].buffer_type = MYSQL_TYPE_STRING;
+    bind_data[1].buffer_length = sizeof(user->full_name);
+    bind_data[1].buffer = user->full_name;
+
+    bind_data[2].buffer_type = MYSQL_TYPE_STRING;
+    bind_data[2].buffer_length = sizeof(user->email);
+    bind_data[2].buffer = user->email;
+
+    if(mysql_stmt_bind_result(stmt_user, bind_data)){
+        fprintf(stderr, "Failed to link results: %s\n", mysql_stmt_error(stmt_user));
+        mysql_stmt_close(stmt_user);
+        return -1;
+    }
+
+    if(mysql_stmt_store_result(stmt_user)){
+        fprintf(stderr, "Failed to transport results: %s\n", mysql_stmt_error(stmt_user));
+        mysql_stmt_close(stmt_user);
+        return -1;
+    }
+
+    int fetch_res = mysql_stmt_fetch(stmt_user);
+
+    if(fetch_res == MYSQL_NO_DATA){
+        mysql_stmt_close(stmt_user);
+        return 1;
+    }else if(fetch_res == 0){
+        mysql_stmt_close(stmt_user);
+        return 0;
+    }else{
+        fprintf(stderr, "Data assignment failure: %s\n", mysql_stmt_error(stmt_user));
+        mysql_stmt_close(stmt_user);
+        return -1;
+    }
+
+}

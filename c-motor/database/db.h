@@ -9,4 +9,6 @@ void db_close(void);
 
 int db_insert_user(const user_protocol_t *user);
 
+int db_find_user(user_data_t *user, char *search_name);
+
 #endif

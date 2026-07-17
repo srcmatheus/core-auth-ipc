@@ -10,4 +10,10 @@ typedef struct __attribute__((packed)) {
     char email[100];
 } user_protocol_t;
 
+typedef struct {
+    int id;
+    char full_name[100];
+    char email[100];
+} user_data_t;
+
 #endif
