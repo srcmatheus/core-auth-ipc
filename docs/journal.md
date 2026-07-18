@@ -68,3 +68,16 @@ Ausência de uma base documental técnica formalizada para rastreabilidade de de
     * **Architecture Decision Records (ADRs):** Justificativa e registro formal das principais escolhas de design do software.
     * **Journal (Diário Técnico):** Registro cronológico detalhando desafios e soluções de engenharia do projeto.
     * **Memory Layout (Mapeamento de Memória):** Documento técnico analítico mapeando o consumo físico em bytes das structs para garantir o controle rigoroso da memória de baixo nível.
+
+    ---
+
+## Registro 8: Inclusão da Função de Visualização de Dados e Adequação da Estrutura de Configuração
+
+Necessidade de expor uma funcionalidade de visualização de registros para o usuário e correção de um tipo de dado incompatível na estrutura de configuração inicial, que gerava inconsistência ao inicializar a conexão com o banco de dados.
+
+**Solução:**
+* **Implementação da Consulta:** Criação da função de listagem de dados, a qual realiza a extração dos registros diretamente do banco, aloca os resultados temporariamente na memória RAM (`mysql_stmt_store_result`) e transfere os valores para as variáveis vinculadas aos buffers de recepção (`mysql_stmt_fetch`).
+* **Refatoração da Estrutura:** Alteração do tipo de dado do campo `port` na estrutura `db_config_t`. O campo, que antes era declarado como `const char *`, passou a ser um `unsigned int` (ocupando 4 bytes em memória). Essa modificação alinha a estrutura ao tipo primitivo exato exigido pela assinatura da função `mysql_real_connect`.
+* **Atualização do Ambiente de Testes:** Modificação do arquivo `main_test.c` para integrar a nova rotina de exibição de dados, permitindo a validação e a execução de testes dinâmicos locais.
+
+> **Commits de Referência:** `93648bf` | `5f656c8` | `f16ac44`

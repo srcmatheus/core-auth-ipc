@@ -27,10 +27,10 @@ Armazena a carga de dados (payload) do usuário que trafega no sistema.
 ### 2. Estrutura: `db_config_t`
 Carrega os ponteiros de configuração de ambiente necessários para estabelecer uma conexão isolada com o driver `libmysqlclient`.
 
-| Campo | Tipo C | Tamanho do Ponteiro | Tamanho do Dado Real | Descrição Mecânica |
+| Campo | Tipo C | Tamanho na Struct | Tamanho do Dado Real | Descrição Mecânica |
 | :--- | :--- | :---: | :---: | :--- |
 | `host` | `const char *` | 8 Bytes | **Dinâmico** | Endereço de IP ou domínio do banco (ex: `127.0.0.1`) |
-| `port` | `const char *` | 8 Bytes | **Dinâmico** | Porta numérica TCP/IP (ex: `3306`) |
+| `port` | `unsigned int` | 4 Bytes | 4 Bytes | Porta numérica TCP/IP (ex: `3306`) |
 | `user` | `const char *` | 8 Bytes | **Dinâmico** | Usuário de acesso ao banco de dados |
 | `pass` | `const char *` | 8 Bytes | **Dinâmico** | Senha de autenticação |
 | `db_name`| `const char *` | 8 Bytes | **Dinâmico** | Nome do Schema a ser provisionado e utilizado |
@@ -38,9 +38,9 @@ Carrega os ponteiros de configuração de ambiente necessários para estabelecer
 ### Razões de Design de Baixo Nível
 
 1. **Tamanho Estático da Estrutura com Dados Apontados Dinâmicos:**
-   Diferente de arrays de caracteres fixos, esta estrutura armazena exclusivamente ponteiros de leitura (`const char *`). Em arquiteturas de 64 bits, cada ponteiro ocupa exatamente 8 bytes, fazendo com que o tamanho total ocupado pela struct na memória RAM seja fixo em **40 bytes** (5 campos × 8 bytes), independentemente do tamanho das strings de configuração recebidas.
+   Diferente de arrays de caracteres fixos, esta estrutura armazena exclusivamente ponteiros de leitura (`const char *`) e um valor inteiro direto. Em arquiteturas de 64 bits, cada ponteiro ocupa exatamente 8 bytes e o `unsigned int` ocupa 4 bytes. Devido às regras de alinhamento de memória do compilador (*padding*), o `unsigned int` de 4 bytes será seguido por 4 bytes invisíveis de preenchimento para alinhar o próximo ponteiro a um endereço múltiplo de 8. Isso faz com que o tamanho total ocupado pela struct na memória RAM seja fixo em **40 bytes** (4 ponteiros × 8 bytes + 4 bytes do `int` + 4 bytes de *padding*), independentemente do tamanho das strings de configuração recebidas.
 
 2. **Gerenciamento de Ciclo de Vida via Ambiente:**
-   Como as variáveis de ambiente já residem em um bloco de memória gerenciado pelo próprio sistema operacional durante a inicialização do processo, a struct apenas referencia esses endereços. Isso elimina a necessidade de alocações dinâmicas manuais (`malloc`/`free`) e evita o risco de fragmentação ou vazamento de memória (*memory leaks*) na camada do motor em C.
+   Como as variáveis de ambiente já residem em um bloco de memória gerenciado pelo próprio sistema operacional durante a inicialização do processo, a struct apenas referencia esses endereços no caso das strings. Isso elimina a necessidade de alocações dinâmicas manuais (`malloc`/`free`) e evita o risco de fragmentação ou vazamento de memória (*memory leaks*) na camada do motor em C.
 
-* **Tamanho total da Struct:** 40 Bytes fixos na memória RAM (em sistemas de 64 bits).
+* **Tamanho total da Struct:** 40 Bytes fixos na memória RAM (em sistemas de 64 bits, já contabilizando o alinhamento/*padding*).
