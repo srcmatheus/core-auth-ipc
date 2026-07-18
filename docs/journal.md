@@ -82,6 +82,8 @@ Necessidade de expor uma funcionalidade de visualização de registros para o us
 
 > **Commits de Referência:** `93648bf` | `5f656c8` | `f16ac44`
 
+---
+
 ## Registro 9: Inclusão de Função de Edição de Dados e Validação de Escopo por ID
 
 Necessidade de implementar uma funcionalidade para a alteração cadastral de usuários no banco de dados, restringindo a mutabilidade aos campos informativos e garantindo que o identificador único permaneça estático para evitar colisões de dados.
@@ -90,3 +92,14 @@ Necessidade de implementar uma funcionalidade para a alteração cadastral de us
 * **Implementação da Edição:** Criação da função de atualização de dados. As strings são recebidas como `const char *` para blindar os buffers originais contra modificações involuntárias.
 * **Mecanismo de Validação:** Integração da função `mysql_stmt_affected_rows` imediatamente após a execução do statement. Isso permite separar logicamente o sucesso da operação (retorno `0`), da ausência do registro no banco (retorno `1` para ID inexistente), além de mapear falhas críticas de infraestrutura (retorno `-1`).
 * **Atualização do ambiente de testes:** arquivo `main_test.c` foi atualizado para incluir a função de edição de dados do usuário.
+
+---
+
+## Registro 10: Inclusão de Função de Exclusão de Dados
+
+Necessidade de implementar a funcionalidade de deleção de registros de usuários no banco de dados, utilizando uma abordagem segura que minimize o uso de recursos e garanta que nenhuma remoção acidental em larga escala ocorra.
+
+**Solução:**
+* **Implementação da Exclusão:** Criação da função de deleção direta baseada em *Prepared Statements*, parametrizando o array `MYSQL_BIND` com um único elemento de tamanho reduzido (`MYSQL_TYPE_LONG`) mapeado estritamente à cláusula condicional da query (`DELETE FROM users WHERE id = ?`).
+* **Mecanismo de Validação:** Utilização da função `mysql_stmt_affected_rows` logo após a execução do comando atômico de deleção. A lógica foi desenhada para retornar `0` em caso de exclusão real do registro, `1` caso o ID fornecido não corresponda a nenhum usuário existente na base (evitando falsos positivos de sucesso), e `-1` para falhas físicas na camada de persistência.
+* **Otimização de Escopo:** Redução do overhead de memória RAM do driver através do dimensionamento exato do buffer de binding (`bind[1]`), eliminando campos de metadados textuais desnecessários (como `.buffer_length` e `.length`) por se tratar de um tipo numérico de tamanho fixo.

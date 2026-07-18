@@ -253,3 +253,52 @@ int db_edit_user(int user_id, const char *new_user_name, const char *new_user_em
     return 0;
 
 }
+
+int db_delete_user(int user_id){
+
+    MYSQL_STMT *stmt_user = mysql_stmt_init(global_connection);
+
+    if(stmt_user == NULL){
+        fprintf(stderr, "Error connecting to the database: %s\n", mysql_error(global_connection));
+        return -1;
+    }
+
+    const char query[] = "DELETE FROM users WHERE id = ?";
+    unsigned long length = strlen(query);
+
+    MYSQL_BIND bind[1];
+    memset(bind, 0, sizeof(bind));
+
+    bind[0].buffer_type = MYSQL_TYPE_LONG;
+    bind[0].buffer = &user_id;
+
+    if(mysql_stmt_prepare(stmt_user, query, length)){
+        fprintf(stderr, "Error during preparation: %s\n", mysql_stmt_error(stmt_user));
+        mysql_stmt_close(stmt_user);
+        return -1;
+    }
+
+    if(mysql_stmt_bind_param(stmt_user, bind)){
+        fprintf(stderr, "Bind error: %s\n", mysql_stmt_error(stmt_user));
+        mysql_stmt_close(stmt_user);
+        return -1;
+    }
+
+    if(mysql_stmt_execute(stmt_user)){
+        fprintf(stderr, "Error executing query: %s\n", mysql_stmt_error(stmt_user));
+        mysql_stmt_close(stmt_user);
+        return -1;
+    }
+
+    my_ulonglong altered_rows = mysql_stmt_affected_rows(stmt_user);
+
+    if(altered_rows == 0){
+        mysql_stmt_close(stmt_user);
+        return 1;
+    }
+
+    mysql_stmt_close(stmt_user);
+
+    return 0;
+
+}

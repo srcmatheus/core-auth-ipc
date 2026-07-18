@@ -13,4 +13,6 @@ int db_find_user(user_data_t *user, const char *search_name);
 
 int db_edit_user(int user_id, const char *new_user_name, const char *new_user_email);
 
+int db_delete_user(int user_id);
+
 #endif
