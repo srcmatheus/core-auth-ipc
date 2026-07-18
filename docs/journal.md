@@ -81,3 +81,12 @@ Necessidade de expor uma funcionalidade de visualização de registros para o us
 * **Atualização do Ambiente de Testes:** Modificação do arquivo `main_test.c` para integrar a nova rotina de exibição de dados, permitindo a validação e a execução de testes dinâmicos locais.
 
 > **Commits de Referência:** `93648bf` | `5f656c8` | `f16ac44`
+
+## Registro 9: Inclusão de Função de Edição de Dados e Validação de Escopo por ID
+
+Necessidade de implementar uma funcionalidade para a alteração cadastral de usuários no banco de dados, restringindo a mutabilidade aos campos informativos e garantindo que o identificador único permaneça estático para evitar colisões de dados.
+
+**Solução:**
+* **Implementação da Edição:** Criação da função de atualização de dados. As strings são recebidas como `const char *` para blindar os buffers originais contra modificações involuntárias.
+* **Mecanismo de Validação:** Integração da função `mysql_stmt_affected_rows` imediatamente após a execução do statement. Isso permite separar logicamente o sucesso da operação (retorno `0`), da ausência do registro no banco (retorno `1` para ID inexistente), além de mapear falhas críticas de infraestrutura (retorno `-1`).
+* **Atualização do ambiente de testes:** arquivo `main_test.c` foi atualizado para incluir a função de edição de dados do usuário.

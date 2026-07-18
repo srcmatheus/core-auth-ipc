@@ -110,7 +110,7 @@ int db_insert_user(const user_protocol_t *user){
 
 }
 
-int db_find_user(user_data_t *user, char *search_name){
+int db_find_user(user_data_t *user, const char *search_name){
 
     MYSQL_STMT *stmt_user = mysql_stmt_init(global_connection);
 
@@ -129,7 +129,7 @@ int db_find_user(user_data_t *user, char *search_name){
     bind_query[0].buffer_type = MYSQL_TYPE_STRING;
     bind_query[0].buffer_length = len_search_name;
     bind_query[0].length = &len_search_name;
-    bind_query[0].buffer = search_name;
+    bind_query[0].buffer = (char *)search_name;
 
     if(mysql_stmt_prepare(stmt_user, query, length)){
         fprintf(stderr, "Error during preparation: %s\n", mysql_stmt_error(stmt_user));
@@ -189,5 +189,67 @@ int db_find_user(user_data_t *user, char *search_name){
         mysql_stmt_close(stmt_user);
         return -1;
     }
+
+}
+
+int db_edit_user(int user_id, const char *new_user_name, const char *new_user_email){
+
+    MYSQL_STMT *stmt_user = mysql_stmt_init(global_connection);
+
+    if(stmt_user == NULL){
+        fprintf(stderr, "Error connecting to the database: %s\n", mysql_error(global_connection));
+        return -1;
+    }
+
+    const char query[] = "UPDATE users SET name = ?, email = ? WHERE id = ?";
+    unsigned long length = strlen(query);
+
+    unsigned long len_name = strlen(new_user_name);
+    unsigned long len_email = strlen(new_user_email);
+
+    MYSQL_BIND bind[3];
+    memset(bind, 0, sizeof(bind));
+
+    bind[0].buffer_type = MYSQL_TYPE_STRING;
+    bind[0].buffer_length = len_name;
+    bind[0].length = &len_name;
+    bind[0].buffer = (char *)new_user_name;
+
+    bind[1].buffer_type = MYSQL_TYPE_STRING;
+    bind[1].buffer_length = len_email;
+    bind[1].length = &len_email;
+    bind[1].buffer = (char *)new_user_email;
+
+    bind[2].buffer_type = MYSQL_TYPE_LONG;
+    bind[2].buffer = &user_id;
+
+    if(mysql_stmt_prepare(stmt_user, query, length)){
+        fprintf(stderr, "Error during preparation: %s\n", mysql_stmt_error(stmt_user));
+        mysql_stmt_close(stmt_user);
+        return -1;
+    }
+
+    if(mysql_stmt_bind_param(stmt_user, bind)){
+        fprintf(stderr, "Bind error: %s\n", mysql_stmt_error(stmt_user));
+        mysql_stmt_close(stmt_user);
+        return -1;
+    }
+
+    if(mysql_stmt_execute(stmt_user)){
+        fprintf(stderr, "Error executing query: %s\n", mysql_stmt_error(stmt_user));
+        mysql_stmt_close(stmt_user);
+        return -1;
+    }
+
+    my_ulonglong altered_rows = mysql_stmt_affected_rows(stmt_user);
+
+    if(altered_rows == 0){
+        mysql_stmt_close(stmt_user);
+        return 1;
+    }
+
+    mysql_stmt_close(stmt_user);
+
+    return 0;
 
 }
