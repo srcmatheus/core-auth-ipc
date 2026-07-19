@@ -7,102 +7,135 @@
 #include "database/config.h"
 #include "protocol.h"
 
-int main(){
+typedef enum {
+    OP_INSERT = 1,
+    OP_FIND   = 2,
+    OP_EDIT   = 3,
+    OP_DELETE = 4,
+    OP_LIST = 5,
+    OP_EXIT   = 6
+} MenuOption;
 
+int main() {
     db_config_t config = {0};
     user_protocol_t user = {0};
     user_data_t user_data = {0};
-
-    int opcao = 0;
+    
+    char input_buffer[256] = {0};
+    int option = 0;
+    int running = 1;
 
     config_init(&config);
     db_init(&config);
 
     printf("\n=== CoreAuth IPC - Modo de Teste Local ===\n");
-    printf("1 - Inserir usuário | 2 - Exibir | 3 - Editar | 5 - Sair\n");
 
-    while(1){
-        printf("\nDigite uma opção: ");
-        scanf("%d", &opcao);
-        printf("\n");
+    while (running) {
+        printf("\n------------------------------------------\n");
+        printf("1 - Inserir | 2 - Exibir | 3 - Editar | 4 - Excluir | 5 - Listar | 6 - Sair\n");
+        printf("Digite uma opção: ");
+        
+        if (fgets(input_buffer, sizeof(input_buffer), stdin) != NULL) {
+            sscanf(input_buffer, "%d", &option);
+        }
 
-        switch(opcao){
-            case 1:
-                printf("Digite um nome: ");
-                scanf(" %[^\n]", user.full_name);
+        switch (option) {
+            case OP_INSERT: {
+                printf("\n--- Novo Cadastro ---\n");
+                
+                printf("Nome completo: ");
+                fgets(user.full_name, sizeof(user.full_name), stdin);
+                user.full_name[strcspn(user.full_name, "\n")] = '\0';
 
-                printf("Digite o email: ");
-                scanf(" %[^\n]", user.email);
+                printf("E-mail: ");
+                fgets(user.email, sizeof(user.email), stdin);
+                user.email[strcspn(user.email, "\n")] = '\0';
 
                 db_insert_user(&user);
-
-                printf("\nCadastro realizado com sucesso!\n");
-
-                printf("\n==========================================\n");
-                while(getchar() != '\n');
+                printf("[+] Cadastro realizado com sucesso!\n");
                 break;
-            case 2:
-                char nome[100] = {0};
-                while(getchar() != '\n');
-                printf("Digite o nome do usuário que deseja encontrar: ");
-                fgets(nome, sizeof(nome), stdin);
-                nome[strcspn(nome, "\n")] = '\0';
+            }
 
-                if(db_find_user(&user_data, nome) == 1){
-                    printf("\nUsuário não encontrado...");
-                    printf("\n==========================================\n");
-                    break;
+            case OP_FIND: {
+                char search_name[100] = {0};
+                
+                printf("\n--- Buscar Usuário ---\n");
+                printf("Digite o nome exato: ");
+                fgets(search_name, sizeof(search_name), stdin);
+                search_name[strcspn(search_name, "\n")] = '\0';
+
+                if (db_find_user(&user_data, search_name) == 1) {
+                    printf("[-] Usuário não encontrado.\n");
+                } else {
+                    printf("\n[+] Resultado:\n");
+                    printf("  ID     : %d\n", user_data.id);
+                    printf("  Nome   : %s\n", user_data.full_name);
+                    printf("  E-mail : %s\n", user_data.email);
                 }
-
-                printf("\nResultado ================================\n");
-                printf("\nID: %d\n", user_data.id);
-                printf("Nome completo: %s\n", user_data.full_name);
-                printf("E-mail: %s\n", user_data.email);
-                printf("\n==========================================\n");
                 break;
-            case 3:
-                int id = 0;
-                char novoNome[100] = {0};
-                char novoEmail[100] = {0};
+            }
 
-                printf("Digite o ID do usuário que deseja editar: ");
-                if (scanf("%d", &id) != 1) {
-                    id = 0;
+            case OP_EDIT: {
+                int target_id = 0;
+                char new_name[100] = {0};
+                char new_email[100] = {0};
+
+                printf("\n--- Editar Usuário ---\n");
+                
+                printf("ID do usuário: ");
+                fgets(input_buffer, sizeof(input_buffer), stdin);
+                if (sscanf(input_buffer, "%d", &target_id) != 1) target_id = 0;
+
+                printf("Novo nome: ");
+                fgets(new_name, sizeof(new_name), stdin);
+                new_name[strcspn(new_name, "\n")] = '\0';
+
+                printf("Novo e-mail: ");
+                fgets(new_email, sizeof(new_email), stdin);
+                new_email[strcspn(new_email, "\n")] = '\0';
+
+                if (db_edit_user(target_id, new_name, new_email) == 1) {
+                    printf("[-] Falha: Usuário não encontrado ou erro na edição.\n");
+                } else {
+                    printf("[+] Cadastro alterado com sucesso!\n");
                 }
+                break;
+            }
 
-                int c;
-                while ((c = getchar()) != '\n' && c != EOF);
+            case OP_DELETE: {
+                int target_id = 0;
 
-                printf("Digite o novo nome: ");
-                if (fgets(novoNome, sizeof(novoNome), stdin) != NULL) {
-                    novoNome[strcspn(novoNome, "\n")] = '\0';
+                printf("\n--- Excluir Usuário ---\n");
+                
+                printf("ID do usuário a excluir: ");
+                fgets(input_buffer, sizeof(input_buffer), stdin);
+                if (sscanf(input_buffer, "%d", &target_id) != 1) target_id = 0;
+
+                if (db_delete_user(target_id) == 1) {
+                    printf("[-] Falha: Usuário não encontrado.\n");
+                } else {
+                    printf("[+] Usuário excluído com sucesso!\n");
                 }
+                break;
+            }
 
-                printf("Digite o novo email: ");
-                if (fgets(novoEmail, sizeof(novoEmail), stdin) != NULL) {
-                    novoEmail[strcspn(novoEmail, "\n")] = '\0';
-                }
+            case OP_LIST:
+                db_list_users();
+                break;
 
-                int res_edit = db_edit_user(id, novoNome, novoEmail);
+            case OP_EXIT: {
+                printf("\nEncerrando o sistema...\n");
+                running = 0;
+                break;
+            }
 
-                if(res_edit == 1){
-                    printf("\nUsuário não encontrado...\n");
-                    printf("\n==========================================\n");
-                    break;
-                }else{
-                    printf("\nCadastro alterado com sucesso!\n");
-                    printf("\n==========================================\n");
-                    break;
-                }
-            case 5:
-                printf("Encerrando programa...\n");
-                db_close();
-                exit(0);
-            default:
-                printf("Opção inválida. ");
-                while(getchar() != '\n');
-                continue;
+            default: {
+                printf("[-] Opção inválida. Tente novamente.\n");
+                break;
+            }
         }
     }
+
+    db_close();
     return 0;
 }

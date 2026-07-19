@@ -112,5 +112,6 @@ Surgiu a necessidade de visualizar todos os dados cadastrados para fins de valid
 
 **Solução:**
 * **Função de exibição geral:** Criação de uma função chamada `db_list_users`, responsável por realizar a requisição e a captura de todos os registros armazenados no banco de dados. Por meio de um laço de repetição que valida o retorno de `mysql_stmt_fetch`, realiza-se a listagem completa dos dados. Caso a base esteja vazia ou ocorra uma falha física no streaming, o sistema dispara o aviso correspondente.
+* **Código de testes refatorado:** além da função mencionada acima, foi realizado a refatoração da estrutura de testes `main_test.c` para se tornar uma interface segura e limpa de testes via CLI.
 
 >**Observação importante:** Esta função foi projetada estritamente para testes de visualização em ambiente de desenvolvimento (CLI) e não integrará a arquitetura final da aplicação. Por essa razão, foi implementada de maneira simplificada, sem paginação de registros.
