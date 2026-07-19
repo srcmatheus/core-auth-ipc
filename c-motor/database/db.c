@@ -302,3 +302,82 @@ int db_delete_user(int user_id){
     return 0;
 
 }
+
+int db_list_users(void){
+    int res_id;
+    char res_name[100];
+    char res_email[100];
+
+    MYSQL_STMT *stmt_user = mysql_stmt_init(global_connection);
+    if(stmt_user == NULL){
+        fprintf(stderr, "Error connecting to the database: %s\n", mysql_error(global_connection));
+        return -1;
+    }
+
+    const char query[] = "SELECT id, name, email FROM users;";
+    unsigned long length = strlen(query);
+
+    if(mysql_stmt_prepare(stmt_user, query, length)){
+        fprintf(stderr, "Error during preparation: %s\n", mysql_stmt_error(stmt_user));
+        mysql_stmt_close(stmt_user);
+        return -1;
+    }
+
+    if(mysql_stmt_execute(stmt_user)){
+        fprintf(stderr, "Error executing query: %s\n", mysql_stmt_error(stmt_user));
+        mysql_stmt_close(stmt_user);
+        return -1;
+    }
+
+    MYSQL_BIND bind_data[3];
+    memset(bind_data, 0, sizeof(bind_data));
+
+    bind_data[0].buffer_type = MYSQL_TYPE_LONG;
+    bind_data[0].buffer = &res_id;
+
+    bind_data[1].buffer_type = MYSQL_TYPE_STRING;
+    bind_data[1].buffer = res_name;
+    bind_data[1].buffer_length = sizeof(res_name);
+
+    bind_data[2].buffer_type = MYSQL_TYPE_STRING;
+    bind_data[2].buffer = res_email;
+    bind_data[2].buffer_length = sizeof(res_email);
+
+    if(mysql_stmt_bind_result(stmt_user, bind_data)){
+        fprintf(stderr, "Failed to link results: %s\n", mysql_stmt_error(stmt_user));
+        mysql_stmt_close(stmt_user);
+        return -1;
+    }
+
+    if(mysql_stmt_store_result(stmt_user)){
+        fprintf(stderr, "Failed to transport results: %s\n", mysql_stmt_error(stmt_user));
+        mysql_stmt_close(stmt_user);
+        return -1;
+    }
+
+    int fetch_status;
+    int count = 0;
+
+    printf("\n=================== LISTAGEM DE USUÁRIOS ===================\n");
+    
+    while ((fetch_status = mysql_stmt_fetch(stmt_user)) == 0) {
+        printf("ID: %d | Nome: %s | Email: %s\n", res_id, res_name, res_email);
+        count++;
+    }
+
+    if (fetch_status == MYSQL_NO_DATA) {
+        if (count == 0) {
+            printf("Nenhum registro encontrado na base de dados.\n");
+            printf("============================================================\n");
+            mysql_stmt_close(stmt_user);
+            return 1;
+        }
+        printf("============================================================\n");
+        mysql_stmt_close(stmt_user);
+        return 0;
+    } else {
+        fprintf(stderr, "Data assignment failure: %s\n", mysql_stmt_error(stmt_user));
+        mysql_stmt_close(stmt_user);
+        return -1;
+    }
+}

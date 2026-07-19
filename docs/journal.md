@@ -103,3 +103,14 @@ Necessidade de implementar a funcionalidade de deleção de registros de usuári
 * **Implementação da Exclusão:** Criação da função de deleção direta baseada em *Prepared Statements*, parametrizando o array `MYSQL_BIND` com um único elemento de tamanho reduzido (`MYSQL_TYPE_LONG`) mapeado estritamente à cláusula condicional da query (`DELETE FROM users WHERE id = ?`).
 * **Mecanismo de Validação:** Utilização da função `mysql_stmt_affected_rows` logo após a execução do comando atômico de deleção. A lógica foi desenhada para retornar `0` em caso de exclusão real do registro, `1` caso o ID fornecido não corresponda a nenhum usuário existente na base (evitando falsos positivos de sucesso), e `-1` para falhas físicas na camada de persistência.
 * **Otimização de Escopo:** Redução do overhead de memória RAM do driver através do dimensionamento exato do buffer de binding (`bind[1]`), eliminando campos de metadados textuais desnecessários (como `.buffer_length` e `.length`) por se tratar de um tipo numérico de tamanho fixo.
+
+---
+
+## Registro 11: Função de teste para exibição completa dos dados
+
+Surgiu a necessidade de visualizar todos os dados cadastrados para fins de validação do código e checagem do estado real da base.
+
+**Solução:**
+* **Função de exibição geral:** Criação de uma função chamada `db_list_users`, responsável por realizar a requisição e a captura de todos os registros armazenados no banco de dados. Por meio de um laço de repetição que valida o retorno de `mysql_stmt_fetch`, realiza-se a listagem completa dos dados. Caso a base esteja vazia ou ocorra uma falha física no streaming, o sistema dispara o aviso correspondente.
+
+>**Observação importante:** Esta função foi projetada estritamente para testes de visualização em ambiente de desenvolvimento (CLI) e não integrará a arquitetura final da aplicação. Por essa razão, foi implementada de maneira simplificada, sem paginação de registros.

@@ -15,4 +15,6 @@ int db_edit_user(int user_id, const char *new_user_name, const char *new_user_em
 
 int db_delete_user(int user_id);
 
+int db_list_users(void);
+
 #endif
