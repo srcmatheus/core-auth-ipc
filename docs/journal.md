@@ -115,3 +115,16 @@ Surgiu a necessidade de visualizar todos os dados cadastrados para fins de valid
 * **Código de testes refatorado:** além da função mencionada acima, foi realizado a refatoração da estrutura de testes `main_test.c` para se tornar uma interface segura e limpa de testes via CLI.
 
 >**Observação importante:** Esta função foi projetada estritamente para testes de visualização em ambiente de desenvolvimento (CLI) e não integrará a arquitetura final da aplicação. Por essa razão, foi implementada de maneira simplificada, sem paginação de registros.
+
+---
+
+## Registro 12: Refatoração do Módulo de Banco de Dados
+
+A estrutura anterior de gerenciamento do banco de dados possuía repetições desnecessárias de código (redundâncias), além de vulnerabilidades que poderiam causar vazamentos de memória (*memory leaks*) e falhas de segmentação (*segmentation faults*).
+
+**Soluções aplicadas:**
+* **Modularização e Abstração:** O código foi desacoplado, e a lógica de infraestrutura foi movida para o novo arquivo `db_utils.c`. Este submódulo agora centraliza a inicialização da conexão e o tratamento base de erros. Também foi implementada uma função utilitária para centralizar e padronizar o ciclo de vida (preparação, vinculação e execução) de *Prepared Statements*.
+* **Eliminação de Números Mágicos:** Foi introduzido o tipo enumerado `db_status_t` (`DB_SUCCESS`, `DB_WARNING`, `DB_CRITICAL_ERROR`) para abstrair os retornos das funções. Isso eliminou o uso de constantes numéricas arbitrárias e aumentou significativamente a legibilidade e a manutenibilidade do código.
+* **Segurança de Memória (String Safety):** Foi adicionada uma validação rigorosa para strings oriundas do banco de dados que correm o risco de omitir o caractere de encerramento (`\0`). O código agora força a terminação nula baseada no ponteiro de tamanho retornado pela API do MySQL (`len_out`), mitigando riscos de *buffer overflow*.
+* **Consistência de Assinaturas:** Funções do CRUD que antes retornavam inteiros genéricos foram atualizadas para retornar estritamente o enum `db_status_t`, garantindo previsibilidade no fluxo de controle.
+* **Adequação da Interface:** O arquivo `main_test.c` foi adaptado para consumir os novos tipos enumerados, isolando os retornos das funções em variáveis locais para evitar o disparo duplicado de consultas ao banco de dados (*side effects*) dentro das estruturas condicionais.

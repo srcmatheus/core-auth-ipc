@@ -5,6 +5,7 @@
 
 #include "database/db.h"
 #include "database/config.h"
+#include "database/db_utils.h"
 #include "protocol.h"
 
 typedef enum {
@@ -12,7 +13,7 @@ typedef enum {
     OP_FIND   = 2,
     OP_EDIT   = 3,
     OP_DELETE = 4,
-    OP_LIST = 5,
+    OP_LIST   = 5,
     OP_EXIT   = 6
 } MenuOption;
 
@@ -64,9 +65,13 @@ int main() {
                 fgets(search_name, sizeof(search_name), stdin);
                 search_name[strcspn(search_name, "\n")] = '\0';
 
-                if (db_find_user(&user_data, search_name) == 1) {
+                db_status_t status = db_find_user(&user_data, search_name);
+
+                if(status == DB_WARNING) {
                     printf("[-] Usuário não encontrado.\n");
-                } else {
+                }else if (status == DB_CRITICAL_ERROR) {
+                    printf("[-] Erro crítico ao acessar o banco de dados.\n");
+                }else {
                     printf("\n[+] Resultado:\n");
                     printf("  ID     : %d\n", user_data.id);
                     printf("  Nome   : %s\n", user_data.full_name);
@@ -84,7 +89,7 @@ int main() {
                 
                 printf("ID do usuário: ");
                 fgets(input_buffer, sizeof(input_buffer), stdin);
-                if (sscanf(input_buffer, "%d", &target_id) != 1) target_id = 0;
+                if(sscanf(input_buffer, "%d", &target_id) != 1) target_id = 0;
 
                 printf("Novo nome: ");
                 fgets(new_name, sizeof(new_name), stdin);
@@ -94,9 +99,13 @@ int main() {
                 fgets(new_email, sizeof(new_email), stdin);
                 new_email[strcspn(new_email, "\n")] = '\0';
 
-                if (db_edit_user(target_id, new_name, new_email) == 1) {
-                    printf("[-] Falha: Usuário não encontrado ou erro na edição.\n");
-                } else {
+                db_status_t status = db_edit_user(target_id, new_name, new_email);
+
+                if(status == DB_WARNING) {
+                    printf("[-] Falha: Usuário não encontrado ou nenhuma alteração feita.\n");
+                }else if (status == DB_CRITICAL_ERROR) {
+                    printf("[-] Erro crítico no servidor de banco de dados.\n");
+                }else {
                     printf("[+] Cadastro alterado com sucesso!\n");
                 }
                 break;
@@ -109,11 +118,15 @@ int main() {
                 
                 printf("ID do usuário a excluir: ");
                 fgets(input_buffer, sizeof(input_buffer), stdin);
-                if (sscanf(input_buffer, "%d", &target_id) != 1) target_id = 0;
+                if(sscanf(input_buffer, "%d", &target_id) != 1) target_id = 0;
 
-                if (db_delete_user(target_id) == 1) {
+                db_status_t status = db_delete_user(target_id);
+
+                if(status == DB_WARNING) {
                     printf("[-] Falha: Usuário não encontrado.\n");
-                } else {
+                }else if (status == DB_CRITICAL_ERROR) {
+                    printf("[-] Erro crítico ao tentar excluir.\n");
+                }else {
                     printf("[+] Usuário excluído com sucesso!\n");
                 }
                 break;
