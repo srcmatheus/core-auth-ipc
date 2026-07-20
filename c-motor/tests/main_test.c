@@ -3,18 +3,20 @@
 #include <string.h>
 #include <mysql/mysql.h>
 
-#include "database/db.h"
-#include "database/config.h"
-#include "database/db_utils.h"
-#include "protocol.h"
+#include "../database/db.h"
+#include "../database/config.h"
+#include "../database/db_utils.h"
+#include "../protocol.h"
+#include "stress_test.h"
 
 typedef enum {
-    OP_INSERT = 1,
-    OP_FIND   = 2,
-    OP_EDIT   = 3,
-    OP_DELETE = 4,
-    OP_LIST   = 5,
-    OP_EXIT   = 6
+    OP_INSERT= 1,
+    OP_FIND= 2,
+    OP_EDIT= 3,
+    OP_DELETE= 4,
+    OP_LIST= 5,
+    OP_TEST= 6,
+    OP_EXIT= 7
 } MenuOption;
 
 int main() {
@@ -33,8 +35,8 @@ int main() {
 
     while (running) {
         printf("\n------------------------------------------\n");
-        printf("1 - Inserir | 2 - Exibir | 3 - Editar | 4 - Excluir | 5 - Listar | 6 - Sair\n");
-        printf("Digite uma opção: ");
+        printf("1 - Inserir | 2 - Exibir | 3 - Editar | 4 - Excluir | 5 - Listar | 6 - Teste | 7 - Sair\n");
+        printf("\nDigite uma opção: ");
         
         if (fgets(input_buffer, sizeof(input_buffer), stdin) != NULL) {
             sscanf(input_buffer, "%d", &option);
@@ -134,6 +136,10 @@ int main() {
 
             case OP_LIST:
                 db_list_users();
+                break;
+
+            case OP_TEST:
+                run_tps_stress_test();
                 break;
 
             case OP_EXIT: {

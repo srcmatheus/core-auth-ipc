@@ -128,3 +128,18 @@ A estrutura anterior de gerenciamento do banco de dados possuía repetições de
 * **Segurança de Memória (String Safety):** Foi adicionada uma validação rigorosa para strings oriundas do banco de dados que correm o risco de omitir o caractere de encerramento (`\0`). O código agora força a terminação nula baseada no ponteiro de tamanho retornado pela API do MySQL (`len_out`), mitigando riscos de *buffer overflow*.
 * **Consistência de Assinaturas:** Funções do CRUD que antes retornavam inteiros genéricos foram atualizadas para retornar estritamente o enum `db_status_t`, garantindo previsibilidade no fluxo de controle.
 * **Adequação da Interface:** O arquivo `main_test.c` foi adaptado para consumir os novos tipos enumerados, isolando os retornos das funções em variáveis locais para evitar o disparo duplicado de consultas ao banco de dados (*side effects*) dentro das estruturas condicionais.
+
+---
+
+## Registro 13: Testes de Desempenho, Estresse e Emissão de Relatórios
+
+Implementação de uma suíte de testes de estresse (carga) para mensurar a eficiência, a vazão de transações por segundo (TPS) e a segurança de memória do motor de banco de dados em C.
+
+**Soluções aplicadas:**
+* **Modularização dos Testes:** Para manter a organização e o desacoplamento do código de produção, os módulos de teste foram consolidados no diretório `tests/`, incluindo a interface interativa CLI (`main_test.c`) e a rotina de estresse (`stress_test.c`).
+* **Automação de Relatórios em Markdown:** Foi implementada uma rotina de geração dinâmica de relatórios em um subdiretório dedicado (`tests/reports/`). O arquivo é nomeado de forma sequencial e incremental (`stress_test_report_X.md`) para garantir a rastreabilidade e evitar sobrescrita entre execuções.
+* **Coleta de Métricas do Ambiente (Hardware Profiling):** Integração com APIs e arquivos do sistema operacional (`/proc/cpuinfo` e `/proc/meminfo`) para registrar automaticamente o modelo do processador (CPU) e a memória RAM disponível (convertida dinamicamente para GB) diretamente no cabeçalho do relatório de testes.
+* **Medição de Alta Precisão:** Utilização do *clock* monotônico POSIX (`clock_gettime` com `CLOCK_MONOTONIC`) para calcular o tempo real de execução com precisão de nanossegundos, imune a alterações do relógio do sistema.
+* **Gestão Rigorosa de Recursos:** Ajuste do ciclo de vida dos *Prepared Statements* em `db_insert_user`, garantindo o fechamento explícito do `MYSQL_STMT` (`mysql_stmt_close`) tanto em fluxos de sucesso quanto em tratamentos de erro, eliminando o esgotamento de *file descriptors* e vazamentos de memória sob carga massiva.
+
+> **Observação operacional:** Como o teste de estresse gera e-mails baseados na variável de iteração do loop, registros duplicados na chave primária/única ocorrerão se o banco de dados não for limpo entre as baterias de testes. Além disso, a quantidade de testes deve ser editada diretamente no código.
