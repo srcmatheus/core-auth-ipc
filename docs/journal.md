@@ -143,3 +143,10 @@ Implementação de uma suíte de testes de estresse (carga) para mensurar a efic
 * **Gestão Rigorosa de Recursos:** Ajuste do ciclo de vida dos *Prepared Statements* em `db_insert_user`, garantindo o fechamento explícito do `MYSQL_STMT` (`mysql_stmt_close`) tanto em fluxos de sucesso quanto em tratamentos de erro, eliminando o esgotamento de *file descriptors* e vazamentos de memória sob carga massiva.
 
 > **Observação operacional:** Como o teste de estresse gera e-mails baseados na variável de iteração do loop, registros duplicados na chave primária/única ocorrerão se o banco de dados não for limpo entre as baterias de testes. Além disso, a quantidade de testes deve ser editada diretamente no código.
+
+## Registro 14: Teste de desempenho em memória com desativação do autocommit
+
+Foi verificado nos testes de estresse preliminares que o tempo ativo de CPU representava menos de 10% do tempo total de execução do processo, evidenciando um gargalo de I/O em disco gerado pelas gravações físicas síncronas do MySQL.
+
+**Solução:**
+* Implementação da desativação temporária do mecanismo de *autocommit* na conexão com o banco de dados durante as rotinas de estresse. Isso permite o agrupamento das inserções em memória RAM (*batch processing*), eliminando o gargalo de escrita síncrona em disco e permitindo medir a capacidade real de processamento em RAM do motor em C.
