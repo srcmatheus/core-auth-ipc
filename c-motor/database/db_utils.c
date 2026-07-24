@@ -106,3 +106,13 @@ db_status_t db_stmt_set(MYSQL_STMT **stmt, const char *query, unsigned long leng
 
     return DB_SUCCESS;
 }
+
+//Test ===============================================================================================
+
+void autocommit(int mode){
+    mysql_autocommit(global_connection, mode);
+}
+
+void commit(void){
+    mysql_commit(global_connection);
+}

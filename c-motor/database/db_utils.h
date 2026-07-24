@@ -21,4 +21,7 @@ void db_close(void);
 db_status_t db_stmt_init(MYSQL_STMT **stmt);
 db_status_t db_stmt_set(MYSQL_STMT **stmt, const char *query, unsigned long length, MYSQL_BIND *bind);
 
+void autocommit(int mode);
+void commit(void);
+
 #endif
