@@ -9,125 +9,160 @@
 
 db_status_t db_insert_user(const user_protocol_t *user){
 
-    MYSQL_STMT *stmt = NULL;
-
-    if(db_stmt_init(&stmt) == DB_CRITICAL_ERROR) return DB_CRITICAL_ERROR;
-
-    const char query[] = "INSERT INTO users(name, email) VALUES(?, ?)";
-    unsigned long length = strlen(query);
+    if (user == NULL) {
+        return DB_WARNING; 
+    }
 
     unsigned long len_name = strlen(user->full_name);
     unsigned long len_email = strlen(user->email);
 
-    MYSQL_BIND bind[2];
+    if (len_name > 100 || len_email > 100 || len_name == 0 || len_email == 0) {
+        return DB_WARNING;
+    }
 
-    memset(bind, 0, sizeof(bind));
+    MYSQL_BIND bind[3] = {0};
 
     bind[0].buffer_type = MYSQL_TYPE_STRING;
     bind[0].buffer = (char *)user->full_name;
-    bind[0].buffer_length = sizeof(user->full_name);
+    bind[0].buffer_length = len_name;
     bind[0].length = &len_name;
 
     bind[1].buffer_type = MYSQL_TYPE_STRING;
     bind[1].buffer = (char *)user->email;
-    bind[1].buffer_length = sizeof(user->email);
+    bind[1].buffer_length = len_email;
     bind[1].length = &len_email;
 
-    if(db_stmt_set(&stmt, query, length, bind) == DB_CRITICAL_ERROR) return DB_CRITICAL_ERROR;
+    bind[2].buffer_type = MYSQL_TYPE_TINY;
+    bind[2].buffer = (void *)&user->target_level;
+    bind[2].buffer_length = sizeof(user->target_level);
 
-    mysql_stmt_close(stmt);
+    return db_execute_stmt(db_stmts.insert_user, bind);
+}
+
+db_status_t db_find_user(user_data_t *out_users, int *out_count, const char *search_name, const char *last_name, int last_id) {
+
+    if(out_users == NULL || out_count == NULL) {
+        return DB_WARNING;
+    }
+
+    *out_count = 0;
+
+    char search_buffer[105] = {0};
+    if(search_name == NULL || search_name[0] == '\0') {
+        strcpy(search_buffer, "%");
+    } else {
+        snprintf(search_buffer, sizeof(search_buffer), "%%%s%%", search_name);
+    }
+
+    unsigned long len_search = strlen(search_buffer);
+
+    const char *cursor_name = (last_name != NULL) ? last_name : "";
+    unsigned long len_cursor_name = strlen(cursor_name);
+    int cursor_id = (last_id > 0) ? last_id : 0;
+
+    MYSQL_BIND bind_in[4] = {0};
+
+    bind_in[0].buffer_type = MYSQL_TYPE_STRING;
+    bind_in[0].buffer = search_buffer;
+    bind_in[0].buffer_length = len_search;
+    bind_in[0].length = &len_search;
+
+    bind_in[1].buffer_type = MYSQL_TYPE_STRING;
+    bind_in[1].buffer = (char *)cursor_name;
+    bind_in[1].buffer_length = len_cursor_name;
+    bind_in[1].length = &len_cursor_name;
+
+    bind_in[2].buffer_type = MYSQL_TYPE_STRING;
+    bind_in[2].buffer = (char *)cursor_name;
+    bind_in[2].buffer_length = len_cursor_name;
+    bind_in[2].length = &len_cursor_name;
+
+    bind_in[3].buffer_type = MYSQL_TYPE_LONG;
+    bind_in[3].buffer = &cursor_id;
+    bind_in[3].buffer_length = sizeof(cursor_id);
+
+    if(db_execute_stmt(db_stmts.find_user, bind_in) == DB_CRITICAL_ERROR) return DB_CRITICAL_ERROR;
+
+    int out_id = 0;
+    char out_name[100] = {0};
+    char out_email[100] = {0};
+    uint8_t out_access = 0;
+    unsigned long len_out_name = 0;
+    unsigned long len_out_email = 0;
+
+    MYSQL_BIND bind_out[4] = {0};
+
+    bind_out[0].buffer_type = MYSQL_TYPE_LONG;
+    bind_out[0].buffer = &out_id;
+    bind_out[0].buffer_length = sizeof(out_id);
+
+    bind_out[1].buffer_type = MYSQL_TYPE_STRING;
+    bind_out[1].buffer = out_name;
+    bind_out[1].buffer_length = sizeof(out_name);
+    bind_out[1].length = &len_out_name;
+
+    bind_out[2].buffer_type = MYSQL_TYPE_STRING;
+    bind_out[2].buffer = out_email;
+    bind_out[2].buffer_length = sizeof(out_email);
+    bind_out[2].length = &len_out_email;
+
+    bind_out[3].buffer_type = MYSQL_TYPE_TINY;
+    bind_out[3].buffer = &out_access;
+    bind_out[3].buffer_length = sizeof(out_access);
+
+    if(mysql_stmt_bind_result(db_stmts.find_user, bind_out)) {
+        fprintf(stderr, "Error binding results: %s\n", mysql_stmt_error(db_stmts.find_user));
+        return DB_CRITICAL_ERROR;
+    }
+
+    if(mysql_stmt_store_result(db_stmts.find_user)) {
+        fprintf(stderr, "Error storing results: %s\n", mysql_stmt_error(db_stmts.find_user));
+        return DB_CRITICAL_ERROR;
+    }
+
+    int fetch_res;
+    while((fetch_res = mysql_stmt_fetch(db_stmts.find_user)) == 0 || fetch_res == MYSQL_DATA_TRUNCATED) {
+        
+        if(*out_count >= 50) break;
+
+        out_name[len_out_name < sizeof(out_name) ? len_out_name : sizeof(out_name) - 1] = '\0';
+        out_email[len_out_email < sizeof(out_email) ? len_out_email : sizeof(out_email) - 1] = '\0';
+
+        out_users[*out_count].id = out_id;
+        strncpy(out_users[*out_count].full_name, out_name, sizeof(out_users[*out_count].full_name) - 1);
+        strncpy(out_users[*out_count].email, out_email, sizeof(out_users[*out_count].email) - 1);
+
+        out_users[*out_count].full_name[sizeof(out_users[*out_count].full_name) - 1] = '\0';
+        out_users[*out_count].email[sizeof(out_users[*out_count].email) - 1] = '\0';
+        out_users[*out_count].access_level = out_access;
+
+        (*out_count)++;
+    }
+
+    mysql_stmt_free_result(db_stmts.find_user);
+
+    if(fetch_res != MYSQL_NO_DATA && fetch_res != 0 && fetch_res != MYSQL_DATA_TRUNCATED) {
+        fprintf(stderr, "Data fetch failure: %s\n", mysql_stmt_error(db_stmts.find_user));
+        return DB_CRITICAL_ERROR;
+    }
+
+    if(*out_count == 0) {
+        return DB_WARNING; 
+    }
 
     return DB_SUCCESS;
 }
 
-db_status_t db_find_user(user_data_t *user, const char *search_name){
+db_status_t db_edit_user(uint32_t target_id, const char *new_user_name, const char *new_user_email, uint8_t new_access){
 
-    MYSQL_STMT *stmt = NULL;
-
-    if(db_stmt_init(&stmt) == DB_CRITICAL_ERROR) return DB_CRITICAL_ERROR;
-
-    const char query[] = "SELECT id, name, email FROM users WHERE name = ?";
-    unsigned long length = strlen(query);
-    unsigned long len_search_name = strlen(search_name);
-
-    MYSQL_BIND bind_query[1];
-    memset(bind_query, 0, sizeof(bind_query));
-
-    bind_query[0].buffer_type = MYSQL_TYPE_STRING;
-    bind_query[0].buffer = (char *)search_name;
-    bind_query[0].buffer_length = len_search_name;
-    bind_query[0].length = &len_search_name;
-
-    if(db_stmt_set(&stmt, query, length, bind_query) == DB_CRITICAL_ERROR) return DB_CRITICAL_ERROR;
-
-    unsigned long len_out_name = 0;
-    unsigned long len_out_email = 0;
-
-    MYSQL_BIND bind_data[3];
-    memset(bind_data, 0, sizeof(bind_data));
-
-    bind_data[0].buffer_type = MYSQL_TYPE_LONG;
-    bind_data[0].buffer = &(user->id);
-    bind_data[0].buffer_length = sizeof(user->id);
-
-    bind_data[1].buffer_type = MYSQL_TYPE_STRING;
-    bind_data[1].buffer = user->full_name;
-    bind_data[1].buffer_length = sizeof(user->full_name);
-    bind_data[1].length = &len_out_name;
-
-    bind_data[2].buffer_type = MYSQL_TYPE_STRING;
-    bind_data[2].buffer = user->email;
-    bind_data[2].buffer_length = sizeof(user->email);
-    bind_data[2].length = &len_out_email;
-
-    if(mysql_stmt_bind_result(stmt, bind_data)){
-        fprintf(stderr, "Failed to link results: %s\n", mysql_stmt_error(stmt));
-        mysql_stmt_close(stmt);
-        return DB_CRITICAL_ERROR;
-    }
-
-    if(mysql_stmt_store_result(stmt)){
-        fprintf(stderr, "Failed to transport results: %s\n", mysql_stmt_error(stmt));
-        mysql_stmt_close(stmt);
-        return DB_CRITICAL_ERROR;
-    }
-
-    int fetch_res = mysql_stmt_fetch(stmt);
-
-    if(fetch_res == MYSQL_NO_DATA){
-        mysql_stmt_free_result(stmt);
-        mysql_stmt_close(stmt);
+    if (target_id <= 0 || new_user_name == NULL || new_user_email == NULL) {
         return DB_WARNING;
-    }else if(fetch_res == 0 || fetch_res == MYSQL_DATA_TRUNCATED){
-        user->full_name[len_out_name < sizeof(user->full_name) ? len_out_name : sizeof(user->full_name) - 1] = '\0';
-        user->email[len_out_email < sizeof(user->email) ? len_out_email : sizeof(user->email) - 1] = '\0';
-        mysql_stmt_free_result(stmt);
-        mysql_stmt_close(stmt);
-        return DB_SUCCESS;
-    }else{
-        fprintf(stderr, "Data assignment failure: %s\n", mysql_stmt_error(stmt));
-        mysql_stmt_free_result(stmt);
-        mysql_stmt_close(stmt);
-        return DB_CRITICAL_ERROR;
     }
-}
-
-db_status_t db_edit_user(int user_id, const char *new_user_name, const char *new_user_email){
-
-     MYSQL_STMT *stmt = NULL;
-
-    if(db_stmt_init(&stmt) == DB_CRITICAL_ERROR) return DB_CRITICAL_ERROR;
-
-    const char query[] = "UPDATE users SET name = ?, email = ? WHERE id = ?";
-    unsigned long length = strlen(query);
 
     unsigned long len_name = strlen(new_user_name);
     unsigned long len_email = strlen(new_user_email);
 
-    int local_id = user_id;
-
-    MYSQL_BIND bind[3];
-    memset(bind, 0, sizeof(bind));
+    MYSQL_BIND bind[4] = {0};
 
     bind[0].buffer_type = MYSQL_TYPE_STRING;
     bind[0].buffer = (char *)new_user_name;
@@ -139,128 +174,38 @@ db_status_t db_edit_user(int user_id, const char *new_user_name, const char *new
     bind[1].buffer_length = len_email;
     bind[1].length = &len_email;
 
-    bind[2].buffer_type = MYSQL_TYPE_LONG;
-    bind[2].buffer = &local_id;
-    bind[2].buffer_length = sizeof(local_id);
+    bind[2].buffer_type = MYSQL_TYPE_TINY;
+    bind[2].buffer = (void *)&new_access;
+    bind[2].buffer_length = sizeof(new_access);
 
-    if(db_stmt_set(&stmt, query, length, bind) == DB_CRITICAL_ERROR) return DB_CRITICAL_ERROR;
+    bind[3].buffer_type = MYSQL_TYPE_LONG;
+    bind[3].buffer = (void *)&target_id;
+    bind[3].buffer_length = sizeof(target_id);
 
-    my_ulonglong altered_rows = mysql_stmt_affected_rows(stmt);
+    if(db_execute_stmt(db_stmts.edit_user, bind) == DB_CRITICAL_ERROR) return DB_CRITICAL_ERROR;
 
-    if(altered_rows == 0){
-        mysql_stmt_close(stmt);
-        return DB_WARNING;
-    }
+    my_ulonglong altered_rows = mysql_stmt_affected_rows(db_stmts.edit_user);
 
-    mysql_stmt_close(stmt);
+    if(altered_rows == (my_ulonglong)-1) return DB_CRITICAL_ERROR;
+
     return DB_SUCCESS;
 }
 
-db_status_t db_delete_user(int user_id){
-
-    MYSQL_STMT *stmt = NULL;
-
-    if(db_stmt_init(&stmt) == DB_CRITICAL_ERROR) return DB_CRITICAL_ERROR;
-
-    const char query[] = "DELETE FROM users WHERE id = ?";
-    unsigned long length = strlen(query);
+db_status_t db_delete_user(uint32_t target_id){
     
-    int local_id = user_id;
+    if(target_id == 0) return DB_WARNING;
 
-    MYSQL_BIND bind[1];
-    memset(bind, 0, sizeof(bind));
+    MYSQL_BIND bind[1] = {0};
 
     bind[0].buffer_type = MYSQL_TYPE_LONG;
-    bind[0].buffer = &local_id;
-    bind[0].buffer_length = sizeof(local_id);
+    bind[0].buffer = &target_id;
+    bind[0].buffer_length = sizeof(target_id);
 
-    if(db_stmt_set(&stmt, query, length, bind) == DB_CRITICAL_ERROR) return DB_CRITICAL_ERROR;
+    if(db_execute_stmt(db_stmts.delete_user, bind) == DB_CRITICAL_ERROR) return DB_CRITICAL_ERROR;
 
-    my_ulonglong altered_rows = mysql_stmt_affected_rows(stmt);
+    my_ulonglong altered_rows = mysql_stmt_affected_rows(db_stmts.delete_user);
 
-    if(altered_rows == 0){
-        mysql_stmt_close(stmt);
-        return DB_WARNING;
-    }
+    if(altered_rows == 0) return DB_WARNING;
 
-    mysql_stmt_close(stmt);
     return DB_SUCCESS;
-}
-
-db_status_t db_list_users(void) {
-    int res_id;
-    char res_name[100];
-    char res_email[100];
-    
-    unsigned long len_out_name = 0;
-    unsigned long len_out_email = 0;
-
-    MYSQL_STMT *stmt = NULL;
-    
-    if (db_stmt_init(&stmt) == DB_CRITICAL_ERROR) return DB_CRITICAL_ERROR;
-
-    const char query[] = "SELECT id, name, email FROM users;";
-    unsigned long length = strlen(query);
-
-    if (db_stmt_set(&stmt, query, length, NULL) == DB_CRITICAL_ERROR) return DB_CRITICAL_ERROR; 
-
-    MYSQL_BIND bind_data[3];
-    memset(bind_data, 0, sizeof(bind_data));
-
-    bind_data[0].buffer_type = MYSQL_TYPE_LONG;
-    bind_data[0].buffer = &res_id;
-    bind_data[0].buffer_length = sizeof(res_id);
-
-    bind_data[1].buffer_type = MYSQL_TYPE_STRING;
-    bind_data[1].buffer = res_name;
-    bind_data[1].buffer_length = sizeof(res_name);
-    bind_data[1].length = &len_out_name;
-
-    bind_data[2].buffer_type = MYSQL_TYPE_STRING;
-    bind_data[2].buffer = res_email;
-    bind_data[2].buffer_length = sizeof(res_email);
-    bind_data[2].length = &len_out_email;
-
-    if (mysql_stmt_bind_result(stmt, bind_data)) {
-        fprintf(stderr, "Failed to link results: %s\n", mysql_stmt_error(stmt));
-        mysql_stmt_close(stmt);
-        return DB_CRITICAL_ERROR;
-    }
-
-    if (mysql_stmt_store_result(stmt)) {
-        fprintf(stderr, "Failed to transport results: %s\n", mysql_stmt_error(stmt));
-        mysql_stmt_close(stmt);
-        return DB_CRITICAL_ERROR;
-    }
-
-    int fetch_status;
-    int count = 0;
-
-    printf("\n=================== LISTAGEM DE USUÁRIOS ===================\n");
-    
-    while ((fetch_status = mysql_stmt_fetch(stmt)) == 0) {
-        res_name[len_out_name < sizeof(res_name) ? len_out_name : sizeof(res_name) - 1] = '\0';
-        res_email[len_out_email < sizeof(res_email) ? len_out_email : sizeof(res_email) - 1] = '\0';
-
-        printf("ID: %d | Nome: %s | Email: %s\n", res_id, res_name, res_email);
-        count++;
-    }
-
-    mysql_stmt_free_result(stmt);
-
-    if (fetch_status == MYSQL_NO_DATA) {
-        printf("============================================================\n");
-        mysql_stmt_close(stmt);
-        
-        if (count == 0) {
-            printf("Nenhum registro encontrado na base de dados.\n");
-            printf("============================================================\n");
-            return DB_WARNING;
-        }
-        return DB_SUCCESS;
-    } else {
-        fprintf(stderr, "Data assignment failure: %s\n", mysql_stmt_error(stmt));
-        mysql_stmt_close(stmt);
-        return DB_CRITICAL_ERROR;
-    }
 }

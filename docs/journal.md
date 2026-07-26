@@ -146,7 +146,21 @@ Implementação de uma suíte de testes de estresse (carga) para mensurar a efic
 
 ## Registro 14: Teste de desempenho em memória com desativação do autocommit
 
-Foi verificado nos testes de estresse preliminares que o tempo ativo de CPU representava menos de 10% do tempo total de execução do processo, evidenciando um gargalo de I/O em disco gerado pelas gravações físicas síncronas do MySQL.
+O código anterior possuía gargalos que, teoricamente, reduziam a performance e limitavam a métrica de TPS. Por isso, foi necessário refatorar a base de código referente às operações CRUD do banco de dados. Embora a taxa de transações por segundo tenha se mantido estável após as alterações, o tempo ativo de CPU caiu expressivamente para menos de 2% do tempo total durante o processamento de 10.000 cadastros.
 
 **Solução:**
 * Implementação da desativação temporária do mecanismo de *autocommit* na conexão com o banco de dados durante as rotinas de estresse. Isso permite o agrupamento das inserções em memória RAM (*batch processing*), eliminando o gargalo de escrita síncrona em disco e permitindo medir a capacidade real de processamento em RAM do motor em C.
+
+---
+
+## Registro 15: Refatoração de toda a estrutura do banco de dados, visando aumento de desempenho e segurança
+
+O código anterior possuía gargalos que, teoricamente, reduziam a performance e limitavam a métrica de TPS. Por isso, foi necessário refatorar a base de código referente às operações CRUD do banco de dados. Embora a taxa de transações por segundo tenha se mantido estável após as alterações, o tempo ativo de CPU caiu expressivamente para menos de 2% do tempo total durante o processamento de 10.000 cadastros.
+
+**Solução:**
+* **Inicialização Única de Prepared Statements (`db_utils.c`):** Reestruturação do ciclo de vida das instruções SQL. As consultas de `INSERT`, `SELECT`, `UPDATE` e `DELETE` passaram a ser alocadas e preparadas no MySQL apenas uma vez, durante o arranque da aplicação (`db_init`). Com isso, as rotinas do `db.c` realizam apenas o vínculo de parâmetros (*bind*) e a execução do comando, eliminando o *overhead* repetitivo de transporte, parse e compilação de SQL no banco de dados a cada chamada.
+* **Paginação por Cursor (Keyset Pagination) e Índice Composto:** Substituição da busca convencional pelo modelo de paginação por cursor (`WHERE name LIKE ? AND (name > ? OR (name = ? AND id > ?)) ORDER BY name ASC, id ASC LIMIT 50`). Para suportar consultas de alta performance em bases com milhões de registros, adicionou-se o índice composto `idx_name_id (name, id)` na tabela `users` da engine `InnoDB`, garantindo complexidade de busca $O(\log N)$ sem varredura completa da tabela.
+* **Suporte ao Nível de Acesso (RBAC):** Atualização da tabela do banco de dados e das estruturas de dados (`user_protocol_t` e `user_data_t`) para trafegar a coluna `access_level` (`TINYINT UNSIGNED`). Na C-API do MySQL, o mapeamento foi padronizado com `MYSQL_TYPE_TINY` e variáveis `uint8_t` (1 byte), assegurando o alinhamento correto de memória sem o risco de truncamento ou leitura de bytes inválidos na *stack*.
+* **Gestão Rigorosa de Memória na Stack:** Eliminação da função `memset` executada repetidamente em tempo de execução, substituída pela inicialização direta na compilação (`MYSQL_BIND bind[...] = {0};`). Remoção de cópias redundantes de variáveis numéricas (como ponteiros temporários de ID) e adição de tratamento explícito do caractere finalizador (`\0`) com limites estritos (`len_name`, `len_email`) nas operações de leitura e escrita de strings, zerando o crescimento de RAM (*0 KB de Memory Leak*).
+* **Robustez no Módulo de Configuração (`config.c`):** Substituição do conversor vulnerável `atoi` por `strtol` na leitura de variáveis de ambiente (`DB_PORT`). A implementação passou a validar o registrador `errno`, ponteiros de fim de string e o intervalo válido de portas TCP (1 a 65535).
+* **Conformidade de Segurança e Resiliência DevSecOps:** Remoção da flag depreciada de reconexão automática (`MYSQL_OPT_RECONNECT`), cuja execução silenciosa destruía os descritores dos *Prepared Statements* e causava falhas de segmentação (*segfaults*). Eliminação de comandos administrativos dinâmicos (`SET GLOBAL`) de dentro do código C, readequando o motor ao Princípio do Privilégio Mínimo (PoLP) para que a aplicação rode com usuário restrito de banco de dados.
