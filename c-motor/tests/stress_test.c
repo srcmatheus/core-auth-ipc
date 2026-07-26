@@ -80,7 +80,7 @@ void run_tps_stress_test(void){
     struct timespec cpu_start, cpu_end;
     int success_count = 0;
     int error_count = 0;
-    user_protocol_t user;
+    user_protocol_t user = {0};
 
     printf("Iniciando teste de stress...\n");
     printf("Alvo: %d inserções sequênciais.\n", TOTAL_ITERATIONS);
@@ -88,14 +88,13 @@ void run_tps_stress_test(void){
     long ram_start_rss, ram_start_hwm;
     long ram_end_rss, ram_end_hwm;
 
-    autocommit(0);
-
     clock_gettime(CLOCK_MONOTONIC, &start);
     clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &cpu_start);
     get_process_memory(&ram_start_rss, &ram_start_hwm);
 
     for(int i = 0; i < TOTAL_ITERATIONS; i++){
         memset(&user, 0, sizeof(user));
+        user.target_level = 0;
 
         snprintf(user.full_name, sizeof(user.full_name), "Stress Test User %d", i);
         snprintf(user.email, sizeof(user.email), "stress_user_%d@domain.com", i);
@@ -111,13 +110,9 @@ void run_tps_stress_test(void){
         }
     }
 
-    commit();
-
     clock_gettime(CLOCK_MONOTONIC, &end);
     clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &cpu_end);
     get_process_memory(&ram_end_rss, &ram_end_hwm);
-
-    autocommit(1);
 
     double total_time = (end.tv_sec - start.tv_sec) + (end.tv_nsec - start.tv_nsec) / 1e9;
     double cpu_time = (cpu_end.tv_sec - cpu_start.tv_sec) + (cpu_end.tv_nsec - cpu_start.tv_nsec) / 1e9;
