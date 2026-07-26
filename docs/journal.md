@@ -155,7 +155,7 @@ O código anterior possuía gargalos que, teoricamente, reduziam a performance e
 
 ## Registro 15: Refatoração de toda a estrutura do banco de dados, visando aumento de desempenho e segurança
 
-O código anterior possuía gargalos que, teoricamente, reduziam a performance e limitavam a métrica de TPS. Por isso, foi necessário refatorar a base de código referente às operações CRUD do banco de dados. Embora a taxa de transações por segundo tenha se mantido estável após as alterações, o tempo ativo de CPU caiu expressivamente para menos de 2% do tempo total durante o processamento de 10.000 cadastros.
+O código anterior possuía gargalos que, teoricamente, reduziam a performance e limitavam a métrica de TPS. Por isso, foi necessário refatorar a base de código referente às operações CRUD do banco de dados. Embora a taxa de transações por segundo não tenha dado um salto, o tempo ativo de CPU caiu expressivamente em relação ao tempo total durante o processamento de 10.000 cadastros.
 
 **Solução:**
 * **Inicialização Única de Prepared Statements (`db_utils.c`):** Reestruturação do ciclo de vida das instruções SQL. As consultas de `INSERT`, `SELECT`, `UPDATE` e `DELETE` passaram a ser alocadas e preparadas no MySQL apenas uma vez, durante o arranque da aplicação (`db_init`). Com isso, as rotinas do `db.c` realizam apenas o vínculo de parâmetros (*bind*) e a execução do comando, eliminando o *overhead* repetitivo de transporte, parse e compilação de SQL no banco de dados a cada chamada.
