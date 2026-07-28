@@ -29,4 +29,6 @@ void db_close(void);
 
 db_status_t db_execute_stmt(MYSQL_STMT *stmt, MYSQL_BIND *bind);
 
+db_status_t db_ping(const db_config_t *config);
+
 #endif

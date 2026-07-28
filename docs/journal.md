@@ -164,3 +164,12 @@ O código anterior possuía gargalos que, teoricamente, reduziam a performance e
 * **Gestão Rigorosa de Memória na Stack:** Eliminação da função `memset` executada repetidamente em tempo de execução, substituída pela inicialização direta na compilação (`MYSQL_BIND bind[...] = {0};`). Remoção de cópias redundantes de variáveis numéricas (como ponteiros temporários de ID) e adição de tratamento explícito do caractere finalizador (`\0`) com limites estritos (`len_name`, `len_email`) nas operações de leitura e escrita de strings, zerando o crescimento de RAM (*0 KB de Memory Leak*).
 * **Robustez no Módulo de Configuração (`config.c`):** Substituição do conversor vulnerável `atoi` por `strtol` na leitura de variáveis de ambiente (`DB_PORT`). A implementação passou a validar o registrador `errno`, ponteiros de fim de string e o intervalo válido de portas TCP (1 a 65535).
 * **Conformidade de Segurança e Resiliência DevSecOps:** Remoção da flag depreciada de reconexão automática (`MYSQL_OPT_RECONNECT`), cuja execução silenciosa destruía os descritores dos *Prepared Statements* e causava falhas de segmentação (*segfaults*). Eliminação de comandos administrativos dinâmicos (`SET GLOBAL`) de dentro do código C, readequando o motor ao Princípio do Privilégio Mínimo (PoLP) para que a aplicação rode com usuário restrito de banco de dados.
+
+---
+
+## Registro 17: Health Check e Auto-Healing de Conexão (db_ping)
+
+Por manter a conexão com o MySQL persistentemente aberta no processo C, existe o risco de a sessão ser encerrada por inatividade durante períodos ociosos (devido ao parâmetro `wait_timeout` do banco de dados ou políticas do Kernel/firewall).
+
+**Solução:**
+* **Implementação de Health Check com Auto-Healing (`db_ping`):** Criação da função responsável por despachar um pacote de teste leve (`mysql_ping`) para verificar a saude do socket. Caso a conexão esteja inativa ou corrompida, o sistema destrói com segurança os ponteiros dos *Prepared Statements* obsoletos (`db_close`), aciona a reconexão automática (`db_init`) e re-prepara toda a estrutura de comandos na memória, garantindo resiliência contínua sem vazamento de recursos.

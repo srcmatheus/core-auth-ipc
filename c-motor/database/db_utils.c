@@ -120,3 +120,17 @@ db_status_t db_execute_stmt(MYSQL_STMT *stmt, MYSQL_BIND *bind) {
 
     return DB_SUCCESS;
 }
+
+db_status_t db_ping(const db_config_t *config){
+
+    if(mysql_ping(global_connection) == 0){
+        return DB_SUCCESS;
+    }
+
+    db_close();
+
+    db_init(config);
+
+    return DB_SUCCESS;
+
+}
