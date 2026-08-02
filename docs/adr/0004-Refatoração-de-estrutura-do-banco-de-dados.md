@@ -1,4 +1,4 @@
-# ADR 0003: Reutilização de Prepared Statements, Paginação por Cursor e Conformidade DevSecOps no Módulo de Banco de Dados
+# ADR 0004: Reutilização de Prepared Statements, Paginação por Cursor e Conformidade DevSecOps no Módulo de Banco de Dados
 
 * **Status:** Aceito
 * **Data:** 2026-07-26

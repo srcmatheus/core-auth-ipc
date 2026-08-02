@@ -173,3 +173,12 @@ Por manter a conexão com o MySQL persistentemente aberta no processo C, existe 
 
 **Solução:**
 * **Implementação de Health Check com Auto-Healing (`db_ping`):** Criação da função responsável por despachar um pacote de teste leve (`mysql_ping`) para verificar a saude do socket. Caso a conexão esteja inativa ou corrompida, o sistema destrói com segurança os ponteiros dos *Prepared Statements* obsoletos (`db_close`), aciona a reconexão automática (`db_init`) e re-prepara toda a estrutura de comandos na memória, garantindo resiliência contínua sem vazamento de recursos.
+
+---
+
+## Registro 18: Especificação de Interface da Camada de IPC Não Bloqueante (`ipc_server.h`)
+
+Para viabilizar a comunicação assíncrona de alto desempenho via sockets de domínio Unix e evitar bloqueios na execução do motor, fez-se necessária a definição de uma interface de IPC baseada em laço de eventos (`epoll`) e buffers de estado por cliente.
+
+**Solução:**
+* **Modelagem de Estruturas de Sessão e Configuração (`ipc_server.h`):** Criação dos tipos de dados e contratos de API para o servidor de IPC. A estrutura `client_context_t` centraliza o estado individual de cada conexão, alocando buffers isolados de 1024 bytes para recepção (`rx_buffer`) e envio (`tx_buffer`), além de ponteiros de deslocamento (`tx_offset`) e controle de autenticação (`is_authenticated`). O contrato abstrai a inicialização do serviço via `ipc_config_t`, vinculando a pilha de IPC ao banco de dados em `ipc_server_start` e estabelece o enum estrito `ipc_status_t` para tratamento previsível de falhas de sistema (*socket*, *bind*, *listen*, *epoll* e *DB*).
