@@ -182,3 +182,12 @@ Para viabilizar a comunicação assíncrona de alto desempenho via sockets de do
 
 **Solução:**
 * **Modelagem de Estruturas de Sessão e Configuração (`ipc_server.h`):** Criação dos tipos de dados e contratos de API para o servidor de IPC. A estrutura `client_context_t` centraliza o estado individual de cada conexão, alocando buffers isolados de 1024 bytes para recepção (`rx_buffer`) e envio (`tx_buffer`), além de ponteiros de deslocamento (`tx_offset`) e controle de autenticação (`is_authenticated`). O contrato abstrai a inicialização do serviço via `ipc_config_t`, vinculando a pilha de IPC ao banco de dados em `ipc_server_start` e estabelece o enum estrito `ipc_status_t` para tratamento previsível de falhas de sistema (*socket*, *bind*, *listen*, *epoll* e *DB*).
+
+---
+
+## Registro 19: Implementação das Funções Auxiliares de Socket e Não Bloqueio (`ipc_server.c`)
+
+Para garantir a correta inicialização do ciclo de vida do servidor de IPC e impedir que operações de I/O travem o loop de eventos principal, implementou-se a camada base de gerenciamento de file descriptors e abstração de sockets Unix.
+
+**Solução:**
+* **Modo Não Bloqueante e Inicialização do Socket (`ipc_server.c`):** Desenvolvimento das funções utilitárias internas de baixo nível. A função `set_nonblocking` utiliza chamadas de sistema `fcntl` para consultar (`F_GETFL`) e aplicar (`F_SETFL`) a flag `O_NONBLOCK` via operação *bitwise OR*, preservando as configurações nativas do socket. A função `bind_socket` centraliza a criação do socket Unix (`AF_UNIX`, `SOCK_STREAM`), a limpeza preventiva de resíduos de instâncias anteriores no sistema de arquivos (`unlink`), a vinculação de endereço (`bind`), a conversão do descriptor para modo não bloqueante e a abertura da fila de escuta (`listen`), tratando falhas em cada etapa com fechamento seguro de recursos (`close`).
