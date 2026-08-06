@@ -4,6 +4,8 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "ipc_server.h"
 
@@ -59,4 +61,38 @@ static int bind_socket(const char *socket_path, int max_connections){
     }
 
     return server_fd;
+}
+
+static client_context_t* client_context(int fd){
+
+    if(fd < 0){
+        return NULL;
+    }
+
+    client_context_t *ctx = (client_context_t *)malloc(sizeof(client_context_t));
+    if(ctx == NULL){
+        perror("malloc failed for client_context_t");
+        return NULL;
+    }
+
+    memset(ctx, 0, sizeof(client_context_t));
+
+    ctx->fd = fd;
+
+    return ctx;
+}
+
+static void client_destroy(client_context_t *ctx){
+
+    if(ctx == NULL){
+        return;
+    }
+
+    if (ctx->fd >= 0) {
+        close(ctx->fd);
+        ctx->fd = -1;
+    }
+
+    free(ctx);
+
 }

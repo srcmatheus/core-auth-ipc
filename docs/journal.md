@@ -191,3 +191,12 @@ Para garantir a correta inicialização do ciclo de vida do servidor de IPC e im
 
 **Solução:**
 * **Modo Não Bloqueante e Inicialização do Socket (`ipc_server.c`):** Desenvolvimento das funções utilitárias internas de baixo nível. A função `set_nonblocking` utiliza chamadas de sistema `fcntl` para consultar (`F_GETFL`) e aplicar (`F_SETFL`) a flag `O_NONBLOCK` via operação *bitwise OR*, preservando as configurações nativas do socket. A função `bind_socket` centraliza a criação do socket Unix (`AF_UNIX`, `SOCK_STREAM`), a limpeza preventiva de resíduos de instâncias anteriores no sistema de arquivos (`unlink`), a vinculação de endereço (`bind`), a conversão do descriptor para modo não bloqueante e a abertura da fila de escuta (`listen`), tratando falhas em cada etapa com fechamento seguro de recursos (`close`).
+
+---
+
+## Registro 20: Implementação do Gerenciamento de Memória do Contexto de Clientes (`ipc_server.c`)
+
+Para gerenciar o ciclo de vida e a integridade do estado de cada cliente conectado sem comprometer o footprint de memória ou a estabilidade do servidor IPC, implementou-se a camada base de alocação e destruição do contexto individual por conexão.
+
+**Solução:**
+* **Alocação e Desalocação Segura de Memória (`ipc_server.c`):** Desenvolvimento das funções utilitárias internas `client_context` e `client_destroy`. A função `client_create` valida o file descriptor recebido, aloca a estrutura `client_context_t` na Heap usando `malloc` e utiliza `memset` para zerar uniformemente o bloco de memória, garantindo a inicialização implícita de buffers, offsets e do estado de autenticação como falso, atribuindo o descriptor ao final. A função `client_destroy` intercepta chamadas com guarda contra ponteiros nulos, encerra o socket de forma segura através da instrução `close` redefinindo o descriptor para `-1` para prevenir *double close*, e libera o bloco de memória alocado através de `free`, prevenindo *memory leaks* e *dangling pointers*.
