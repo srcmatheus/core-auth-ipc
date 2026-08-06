@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/epoll.h>
 
 #include "ipc_server.h"
 
@@ -94,5 +95,37 @@ static void client_destroy(client_context_t *ctx){
     }
 
     free(ctx);
+}
 
+static void handle_accept(int epoll_fd, int server_fd){
+
+    while(1){
+        
+        int client_fd = accept4(server_fd, NULL, NULL, SOCK_NONBLOCK);
+
+        if(client_fd < 0){
+            if(errno == EAGAIN || errno == EWOULDBLOCK) break;
+
+            if(errno == EINTR) continue;
+
+            perror("accept failed");
+            break;
+        }
+
+        client_context_t *ctx = client_context(client_fd);
+        if(ctx == NULL){
+            close(client_fd);
+            continue;
+        }
+
+        struct epoll_event ev;
+        ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
+        ev.data.ptr = ctx;
+
+        if(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, client_fd, &ev) < 0){
+            perror("epoll_ctl: client_fd failed");
+            client_destroy(ctx);
+            continue;
+        }
+    }
 }

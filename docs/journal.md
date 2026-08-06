@@ -200,3 +200,12 @@ Para gerenciar o ciclo de vida e a integridade do estado de cada cliente conecta
 
 **Solução:**
 * **Alocação e Desalocação Segura de Memória (`ipc_server.c`):** Desenvolvimento das funções utilitárias internas `client_context` e `client_destroy`. A função `client_create` valida o file descriptor recebido, aloca a estrutura `client_context_t` na Heap usando `malloc` e utiliza `memset` para zerar uniformemente o bloco de memória, garantindo a inicialização implícita de buffers, offsets e do estado de autenticação como falso, atribuindo o descriptor ao final. A função `client_destroy` intercepta chamadas com guarda contra ponteiros nulos, encerra o socket de forma segura através da instrução `close` redefinindo o descriptor para `-1` para prevenir *double close*, e libera o bloco de memória alocado através de `free`, prevenindo *memory leaks* e *dangling pointers*.
+
+---
+
+## Registro 21: Implementação da Rotina de Aceitação de Conexões Não Bloqueantes (`ipc_server.c`)
+
+Para garantir a drenagem completa de conexões pendentes no socket e o registro assíncrono de novos clientes sem bloquear a execução do servidor, implementou-se a função de tratamento de conexões `handle_accept`.
+
+**Solução:**
+* **Aceitação Não Bloqueante e Registro no Epoll (`ipc_server.c`):** Desenvolvimento da rotina interna `handle_accept`. A função executa um laço contínuo invocando a chamada de sistema `accept` para capturar todos os clientes pendentes até que o retorno `-1` com `errno` igual a `EAGAIN` ou `EWOULDBLOCK` sinalize o esvaziamento da fila do kernel. Para cada cliente aceito, a função aplica o modo não bloqueante (`set_nonblocking`), aloca a estrutura de estado do cliente (`client_context_t`) e registra o descriptor no `epoll` utilizando notificação orientada a borda (`EPOLLET`) associada ao evento `EPOLLIN`. Em caso de erro em qualquer etapa da inicialização do cliente, o contexto é descartado e o descriptor é encerrado com segurança.
