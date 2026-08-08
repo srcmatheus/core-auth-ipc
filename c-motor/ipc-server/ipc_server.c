@@ -1,4 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
+#define _GNU_SOURCE
 #include <signal.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -155,13 +156,41 @@ static void handle_accept(int epoll_fd, int server_fd){
     }
 }
 
+static void handle_client_write(int epoll_fd, client_context_t *ctx) {
+
+    if(ctx == NULL || ctx->fd < 0 || ctx->tx_bytes == 0) return;
+
+    while(ctx->tx_offset < ctx->tx_bytes){
+        ssize_t bytes_written = write(ctx->fd, 
+                                      ctx->tx_buffer + ctx->tx_offset, 
+                                      ctx->tx_bytes - ctx->tx_offset);
+
+        if(bytes_written < 0){
+            if(errno == EAGAIN || errno == EWOULDBLOCK) break;
+            if(errno == EINTR) continue;
+
+            perror("write failed");
+            epoll_ctl(epoll_fd, EPOLL_CTL_DEL, ctx->fd, NULL);
+            client_destroy(ctx);
+            return;
+        }
+
+        ctx->tx_offset += (size_t)bytes_written;
+    }
+
+    if(ctx->tx_offset == ctx->tx_bytes){
+        ctx->tx_bytes = 0;
+        ctx->tx_offset = 0;
+    }
+}
+
 static void handle_client_data(int epoll_fd, client_context_t *ctx){
 
     while(1){
         size_t free_space = RX_BUFFER_SIZE - ctx->rx_bytes;
 
         if(free_space == 0){
-            fprintf("stderr", "Aviso");
+            fprintf(stderr, "Warning: rx_buffer full on fd %d. Closing connection.\n", ctx->fd);
             epoll_ctl(epoll_fd, EPOLL_CTL_DEL, ctx->fd, NULL);
             client_destroy(ctx);
             return;
@@ -190,6 +219,7 @@ static void handle_client_data(int epoll_fd, client_context_t *ctx){
         ctx->rx_bytes += (size_t)bytes_read;
     }
 
+    parse_and_execute_command(epoll_fd, ctx);
 }
 
 ipc_status_t ipc_server_start(const ipc_config_t *ipc_config, const db_config_t *db_config){
@@ -200,7 +230,7 @@ ipc_status_t ipc_server_start(const ipc_config_t *ipc_config, const db_config_t 
 
     const char *socket_path = (ipc_config->socket_path != NULL) ? ipc_config->socket_path : DEFAULT_SOCKET_PATH;
     int max_conn = (ipc_config->max_connections > 0) ? ipc_config->max_connections : DEFAULT_MAX_CONN;
-    const char *auth_token = (ipc_config->auth_token != NULL) ? ipc_config->auth_token : DEFAULT_AUTH_TOKEN;
+    //const char *auth_token = (ipc_config->auth_token != NULL) ? ipc_config->auth_token : DEFAULT_AUTH_TOKEN;
     int timeout = (ipc_config->timeout_ms > 0) ? ipc_config->timeout_ms : DEFAULT_TIMEOUT_MS;
 
     int server_fd = bind_socket(socket_path, max_conn);
@@ -259,6 +289,7 @@ ipc_status_t ipc_server_start(const ipc_config_t *ipc_config, const db_config_t 
                 handle_accept(epoll_fd, server_fd);
             }else{
                 client_context_t *ctx = (client_context_t *)events[i].data.ptr;
+                handle_client_data(epoll_fd, ctx);
             }
         }
     }

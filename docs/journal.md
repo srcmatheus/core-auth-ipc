@@ -236,3 +236,12 @@ Para garantir a ingestão contínua de dados de clientes sem bloquear o loop de 
 
 **Solução:**
 * **Drenagem de Buffer e Tratamento de Eventos de Leitura (`ipc_server.c`):** Desenvolvimento da rotina `handle_client_data`. A função executa um laço contínuo de leitura (`read`) sobre o descriptor do cliente até que o erro `EAGAIN` ou `EWOULDBLOCK` confirme o esvaziamento completo do buffer do Kernel (padrão *Edge-Triggered*). O algoritmo realiza o cálculo dinâmico de espaço restante (`free_space`) e protege o sistema contra estouro de memória (*buffer overflow*). Caso o buffer seja totalmente preenchido sem processamento, ocorram erros não recuperáveis de leitura ou o cliente encerre a conexão de forma graciosa (sinalizado por `bytes_read == 0`), a função descadastra o descriptor da instância do `epoll` (`EPOLL_CTL_DEL`) e executa a liberação segura do contexto via `client_destroy`. Interrupções por sinais de sistema (`EINTR`) são tratadas com retransmissão imediata.
+
+---
+
+### Registro 25: Descarregamento Assíncrono de Buffer e Envio Não Bloqueante (`ipc_server.c`)
+
+Para assegurar a transmissão de respostas e dados ao cliente sem causar travamentos no laço de eventos do *epoll*, implementou-se a rotina interna `handle_client_write`.
+
+**Solução:**
+* **Gerenciamento de Buffer de Transmissão e I/O Não Bloqueante (`ipc_server.c`):** Desenvolvimento da rotina `handle_client_write`. A função é responsável por descarregar os bytes acumulados no buffer de escrita do cliente (`tx_buffer`) diretamente para o *file descriptor* (`ctx->fd`). A transmissão ocorre através de um laço executando a syscall `write` com controle contínuo de deslocamento (`tx_offset`), garantindo o envio parcial de dados caso o buffer do Kernel atinja o limite e retorne `EAGAIN` ou `EWOULDBLOCK`. O algoritmo trata interrupções por sinais (`EINTR`) reapresentando a chamada e realiza o encerramento gracioso do contexto via `client_destroy` e remoção do *epoll* (`EPOLL_CTL_DEL`) em caso de erros críticos de I/O (`bytes_written < 0`). Ao concluir a entrega de todos os bytes (`tx_offset == tx_bytes`), os ponteiros de controle do buffer são zerados sem alocação dinâmica.
