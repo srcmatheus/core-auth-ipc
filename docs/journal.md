@@ -227,3 +227,12 @@ Para assegurar a interrupção segura do servidor, a liberação adequada de rec
 
 **Solução:**
 * **Gestão Assíncrona de Sinais e Parada do Servidor (`ipc_server.c`):** Implementação do manipulador de sinais `sig_handler` e da rotina de inicialização `setup_signals`. A solução utiliza a API `sigaction` para capturar os sinais `SIGINT` (interrupção via terminal) e `SIGTERM` (solicitação de encerramento do SO), modificando com segurança atômica a flag `keep_running` (declarada como `static volatile sig_atomic_t`). Adicionalmente, disponibilizou-se a função pública `ipc_server_stop` para permitir a interrupção programática do servidor por outros módulos da aplicação. Esse mecanismo garante que o loop de eventos seja interrompido de forma controlada, permitindo a execução das rotinas de limpeza (*cleanup*), fechamento de descritores e remoção do socket no sistema de arquivos.
+
+---
+
+## Registro 24: Rotina de Leitura Não Bloqueante e Drenagem de Sockets (`ipc_server.c`)
+
+Para garantir a ingestão contínua de dados de clientes sem bloquear o loop de eventos e prover o descarte seguro de conexões inválidas ou encerradas, implementou-se a função interna `handle_client_data`.
+
+**Solução:**
+* **Drenagem de Buffer e Tratamento de Eventos de Leitura (`ipc_server.c`):** Desenvolvimento da rotina `handle_client_data`. A função executa um laço contínuo de leitura (`read`) sobre o descriptor do cliente até que o erro `EAGAIN` ou `EWOULDBLOCK` confirme o esvaziamento completo do buffer do Kernel (padrão *Edge-Triggered*). O algoritmo realiza o cálculo dinâmico de espaço restante (`free_space`) e protege o sistema contra estouro de memória (*buffer overflow*). Caso o buffer seja totalmente preenchido sem processamento, ocorram erros não recuperáveis de leitura ou o cliente encerre a conexão de forma graciosa (sinalizado por `bytes_read == 0`), a função descadastra o descriptor da instância do `epoll` (`EPOLL_CTL_DEL`) e executa a liberação segura do contexto via `client_destroy`. Interrupções por sinais de sistema (`EINTR`) são tratadas com retransmissão imediata.

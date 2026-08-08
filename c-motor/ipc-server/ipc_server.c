@@ -155,6 +155,43 @@ static void handle_accept(int epoll_fd, int server_fd){
     }
 }
 
+static void handle_client_data(int epoll_fd, client_context_t *ctx){
+
+    while(1){
+        size_t free_space = RX_BUFFER_SIZE - ctx->rx_bytes;
+
+        if(free_space == 0){
+            fprintf("stderr", "Aviso");
+            epoll_ctl(epoll_fd, EPOLL_CTL_DEL, ctx->fd, NULL);
+            client_destroy(ctx);
+            return;
+        }
+
+        ssize_t bytes_read = read(ctx->fd, ctx->rx_buffer + ctx->rx_bytes, free_space);
+
+        if(bytes_read < 0){
+            if(errno == EAGAIN || errno == EWOULDBLOCK) break;
+            if(errno == EINTR) continue;
+
+            perror("read failed");
+            epoll_ctl(epoll_fd, EPOLL_CTL_DEL, ctx->fd, NULL);
+            client_destroy(ctx);
+            return;
+        }
+
+        if (bytes_read == 0) {
+            epoll_ctl(epoll_fd, EPOLL_CTL_DEL, ctx->fd, NULL);
+            client_destroy(ctx);
+            return;
+        }
+
+        //Handshake token
+
+        ctx->rx_bytes += (size_t)bytes_read;
+    }
+
+}
+
 ipc_status_t ipc_server_start(const ipc_config_t *ipc_config, const db_config_t *db_config){
 
     setup_signals();
