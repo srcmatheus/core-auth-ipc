@@ -9,6 +9,9 @@
 #include <sys/epoll.h>
 
 #include "ipc_server.h"
+#include "../database/db_utils.h"
+
+#define MAX_EVENTS 64
 
 static int set_nonblocking(int fd){
 
@@ -128,4 +131,76 @@ static void handle_accept(int epoll_fd, int server_fd){
             continue;
         }
     }
+}
+
+ipc_status_t ipc_server_start(const ipc_config_t *ipc_config, const db_config_t *db_config){
+
+    if(ipc_config == NULL || db_config == NULL) return IPC_ERROR_SOCKET;
+
+    const char *socket_path = (ipc_config->socket_path != NULL) ? ipc_config->socket_path : DEFAULT_SOCKET_PATH;
+    int max_conn = (ipc_config->max_connections != NULL) ? ipc_config->max_connections : DEFAULT_MAX_CONN;
+    const char *auth_token = (ipc_config->auth_token != NULL) ? ipc_config->auth_token : DEFAULT_AUTH_TOKEN;
+    int timeout = (ipc_config->timeout_ms != NULL) ? ipc_config->timeout_ms : DEFAULT_TIMEOUT_MS;
+
+    int server_fd = bind_socket(socket_path, max_conn);
+    if(server_fd < 0){
+        return IPC_ERROR_BIND;
+    }
+
+    int epoll_fd = epoll_create1(0);
+    if(epoll_fd < 0){
+        perror("epoll_create1 failed");
+
+        close(server_fd);
+        unlink(socket_path);
+        server_fd = -1;
+
+        return IPC_ERROR_EPOLL;
+    }
+
+    struct epoll_event ev = {0};
+    ev.events = EPOLLIN;
+    ev.data.fd = server_fd;
+
+    if(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, server_fd, &ev) < 0){
+        perror("epoll_ctl: server_fd failed");
+
+        close(epoll_fd);
+        close(server_fd);
+        unlink(socket_path);
+
+        epoll_fd = -1;
+        server_fd = -1;
+
+        return IPC_ERROR_EPOLL;
+    }
+
+    struct epoll_event events[MAX_EVENTS];
+
+    while(1){
+
+        int num_events = epoll_wait(epoll_fd, events, MAX_EVENTS, timeout);
+
+        if(num_events < 0){
+            if(errno == EINTR) continue;
+
+            perror("epoll_wait failed");
+            break;
+        }
+
+        if(num_events == 0){
+            db_ping(db_config);
+            continue;
+        }
+
+        for(int i = 0; i < num_events; i++){
+            if(events[i].data.fd == server_fd){
+                handle_accept(epoll_fd, server_fd);
+            }else{
+                client_context_t *ctx = (client_context_t *)events[i].data.ptr;
+            }
+        }
+    }
+
+    return IPC_SUCCESS;
 }

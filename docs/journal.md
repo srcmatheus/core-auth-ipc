@@ -209,3 +209,12 @@ Para garantir a drenagem completa de conexões pendentes no socket e o registro 
 
 **Solução:**
 * **Aceitação Não Bloqueante e Registro no Epoll (`ipc_server.c`):** Desenvolvimento da rotina interna `handle_accept`. A função executa um laço contínuo invocando a chamada de sistema `accept` para capturar todos os clientes pendentes até que o retorno `-1` com `errno` igual a `EAGAIN` ou `EWOULDBLOCK` sinalize o esvaziamento da fila do kernel. Para cada cliente aceito, a função aplica o modo não bloqueante (`set_nonblocking`), aloca a estrutura de estado do cliente (`client_context_t`) e registra o descriptor no `epoll` utilizando notificação orientada a borda (`EPOLLET`) associada ao evento `EPOLLIN`. Em caso de erro em qualquer etapa da inicialização do cliente, o contexto é descartado e o descriptor é encerrado com segurança.
+
+---
+
+## Registro 22: Inicialização e Loop de Eventos do Servidor IPC (`ipc_server.c`)
+
+Para prover a infraestrutura principal do servidor IPC, garantir a orquestração assíncrona de conexões e manter a resiliência operacional do sistema, implementou-se a função de inicialização e ciclo de vida `ipc_server_start`.
+
+**Solução:**
+* **Inicialização da Infraestrutura e Ciclo Reativo (`ipc_server.c`):** Desenvolvimento da rotina principal `ipc_server_start`. A função valida as configurações recebidas (aplicando *fallbacks* para valores padrão), realiza o *bind* do socket Unix e instancia a interface do Kernel via `epoll_create1`. O descriptor do servidor (`server_fd`) é devidamente cadastrado para monitoramento de entrada (`EPOLLIN`). Em seguida, a rotina entra em um laço infinito que invoca `epoll_wait` para aguardar eventos de rede em lote. O ciclo lida com interrupções de sinais do sistema (`EINTR`), realiza pings preventivos ao banco de dados (`db_ping`) durante períodos de ociosidade (*timeout*) e faz o *dispatch* reativo dos eventos: redirecionando novas conexões para a rotina `handle_accept` ou recuperando o contexto (`client_context_t`) de clientes ativos. Todo o fluxo conta com tratamento rigoroso de exceções para encerramento e liberação segura de recursos (*cleanup*) em caso de falhas na inicialização.
