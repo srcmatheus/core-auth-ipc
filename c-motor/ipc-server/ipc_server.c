@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+#include <signal.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <errno.h>
@@ -12,6 +14,26 @@
 #include "../database/db_utils.h"
 
 #define MAX_EVENTS 64
+
+static volatile sig_atomic_t keep_running = 1;
+
+static void sig_handler(int signum){
+    (void)signum;
+    keep_running = 0;
+}
+
+static void setup_signals(void){
+    struct sigaction sa = {0};
+    sa.sa_handler = sig_handler;
+    sigemptyset(&sa.sa_mask);
+
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
+}
+
+void ipc_server_stop(void) {
+    keep_running = 0;
+}
 
 static int set_nonblocking(int fd){
 
@@ -135,12 +157,14 @@ static void handle_accept(int epoll_fd, int server_fd){
 
 ipc_status_t ipc_server_start(const ipc_config_t *ipc_config, const db_config_t *db_config){
 
+    setup_signals();
+
     if(ipc_config == NULL || db_config == NULL) return IPC_ERROR_SOCKET;
 
     const char *socket_path = (ipc_config->socket_path != NULL) ? ipc_config->socket_path : DEFAULT_SOCKET_PATH;
-    int max_conn = (ipc_config->max_connections != NULL) ? ipc_config->max_connections : DEFAULT_MAX_CONN;
+    int max_conn = (ipc_config->max_connections > 0) ? ipc_config->max_connections : DEFAULT_MAX_CONN;
     const char *auth_token = (ipc_config->auth_token != NULL) ? ipc_config->auth_token : DEFAULT_AUTH_TOKEN;
-    int timeout = (ipc_config->timeout_ms != NULL) ? ipc_config->timeout_ms : DEFAULT_TIMEOUT_MS;
+    int timeout = (ipc_config->timeout_ms > 0) ? ipc_config->timeout_ms : DEFAULT_TIMEOUT_MS;
 
     int server_fd = bind_socket(socket_path, max_conn);
     if(server_fd < 0){
@@ -177,7 +201,7 @@ ipc_status_t ipc_server_start(const ipc_config_t *ipc_config, const db_config_t 
 
     struct epoll_event events[MAX_EVENTS];
 
-    while(1){
+    while(keep_running){
 
         int num_events = epoll_wait(epoll_fd, events, MAX_EVENTS, timeout);
 
@@ -200,6 +224,21 @@ ipc_status_t ipc_server_start(const ipc_config_t *ipc_config, const db_config_t 
                 client_context_t *ctx = (client_context_t *)events[i].data.ptr;
             }
         }
+    }
+
+    if(epoll_fd >= 0){
+        close(epoll_fd);
+        epoll_fd = -1;
+    }
+
+    if(server_fd >= 0){
+        close(server_fd);
+        server_fd = -1;
+    }
+
+    if(socket_path){
+        unlink(socket_path);
+        socket_path = NULL;
     }
 
     return IPC_SUCCESS;

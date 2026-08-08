@@ -218,3 +218,12 @@ Para prover a infraestrutura principal do servidor IPC, garantir a orquestraçã
 
 **Solução:**
 * **Inicialização da Infraestrutura e Ciclo Reativo (`ipc_server.c`):** Desenvolvimento da rotina principal `ipc_server_start`. A função valida as configurações recebidas (aplicando *fallbacks* para valores padrão), realiza o *bind* do socket Unix e instancia a interface do Kernel via `epoll_create1`. O descriptor do servidor (`server_fd`) é devidamente cadastrado para monitoramento de entrada (`EPOLLIN`). Em seguida, a rotina entra em um laço infinito que invoca `epoll_wait` para aguardar eventos de rede em lote. O ciclo lida com interrupções de sinais do sistema (`EINTR`), realiza pings preventivos ao banco de dados (`db_ping`) durante períodos de ociosidade (*timeout*) e faz o *dispatch* reativo dos eventos: redirecionando novas conexões para a rotina `handle_accept` ou recuperando o contexto (`client_context_t`) de clientes ativos. Todo o fluxo conta com tratamento rigoroso de exceções para encerramento e liberação segura de recursos (*cleanup*) em caso de falhas na inicialização.
+
+---
+
+## Registro 23: Mecanismo de Interrupção e Encerramento Gracioso (*Graceful Shutdown*) (`ipc_server.c`)
+
+Para assegurar a interrupção segura do servidor, a liberação adequada de recursos e o tratamento previsível de sinais do sistema operacional sem finalização abrupta do processo, implementou-se a infraestrutura de *graceful shutdown*.
+
+**Solução:**
+* **Gestão Assíncrona de Sinais e Parada do Servidor (`ipc_server.c`):** Implementação do manipulador de sinais `sig_handler` e da rotina de inicialização `setup_signals`. A solução utiliza a API `sigaction` para capturar os sinais `SIGINT` (interrupção via terminal) e `SIGTERM` (solicitação de encerramento do SO), modificando com segurança atômica a flag `keep_running` (declarada como `static volatile sig_atomic_t`). Adicionalmente, disponibilizou-se a função pública `ipc_server_stop` para permitir a interrupção programática do servidor por outros módulos da aplicação. Esse mecanismo garante que o loop de eventos seja interrompido de forma controlada, permitindo a execução das rotinas de limpeza (*cleanup*), fechamento de descritores e remoção do socket no sistema de arquivos.
