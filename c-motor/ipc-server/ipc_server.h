@@ -13,8 +13,13 @@
 #define DEFAULT_MAX_CONN 10
 #define DEFAULT_TIMEOUT_MS 6000
 
-#define RX_BUFFER_SIZE 1024
-#define TX_BUFFER_SIZE 1024
+#define RX_BUFFER_SIZE 2048
+#define TX_BUFFER_SIZE 32768
+
+typedef struct {
+    int32_t status;
+    uint32_t count;
+} ipc_response_header_t;
 
 typedef struct{
     int fd;

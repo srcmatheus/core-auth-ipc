@@ -94,9 +94,7 @@ static int bind_socket(const char *socket_path, int max_connections){
 
 static client_context_t* client_context(int fd){
 
-    if(fd < 0){
-        return NULL;
-    }
+    if(fd < 0) return NULL;
 
     client_context_t *ctx = (client_context_t *)malloc(sizeof(client_context_t));
     if(ctx == NULL){
@@ -123,6 +121,17 @@ static void client_destroy(client_context_t *ctx){
     }
 
     free(ctx);
+}
+
+static void update_epoll_events(int epoll_fd, client_context_t *ctx){
+
+    struct epoll_event ev = {0};
+    ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
+
+    if(ctx->tx_offset < ctx->tx_bytes) ev.events |= EPOLLOUT;
+
+    ev.data.ptr = ctx;
+    epoll_ctl(epoll_fd, EPOLL_CTL_MOD, ctx->fd, &ev);
 }
 
 static void handle_accept(int epoll_fd, int server_fd){
@@ -183,50 +192,71 @@ static void handle_client_write(int epoll_fd, client_context_t *ctx) {
     if(ctx->tx_offset == ctx->tx_bytes){
         ctx->tx_bytes = 0;
         ctx->tx_offset = 0;
+        update_epoll_events(epoll_fd, ctx);
     }
 }
 
 static void parse_and_execute_command(int epoll_fd, client_context_t *ctx){
 
-    if (ctx == NULL || ctx->rx_bytes < sizeof(user_protocol_t)) return;
+    while(ctx->rx_bytes >= sizeof(user_protocol_t)){
 
-    const user_protocol_t *proto = (const user_protocol_t *)ctx->rx_buffer;
-    db_status_t db_res = DB_CRITICAL_ERROR;
+        const user_protocol_t *proto = (const user_protocol_t *)ctx->rx_buffer;
+        db_status_t db_res = DB_CRITICAL_ERROR;
+        ipc_response_header_t header = {0};
 
-    switch(proto->op_code){
-        case OP_INSERT:
-            db_res = db_insert_user(proto);
-            break;
+        user_data_t out_users[50] = {0};
+        int out_count = 0;
 
-        case OP_FIND: {
-            user_data_t out_users[50] = {0};
-            int out_count = 0;
-            
-            db_res = db_find_user(out_users, &out_count, proto->full_name, "", 0);
+        switch(proto->op_code){
+            case OP_INSERT:
+                db_res = db_insert_user(proto);
+                break;
+
+            case OP_FIND:
+                const char *search_term = proto->full_name;
+                const char *last_name = (proto->id > 0) ? proto->full_name : NULL;
+                int last_id = (int)proto->id;
+
+                db_res = db_find_user(out_users, &out_count, search_term, last_name, last_id);
+                break;
+
+            case OP_EDIT:
+                db_res = db_edit_user(proto->id, proto->full_name, proto->email, proto->target_level);
+                break;
+
+            case OP_DELETE:
+                db_res = db_delete_user(proto->id);
+                break;
+
+            default:
+                fprintf(stderr, "Warning: Invalid opcode received: %d\n", proto->op_code);
+                db_res = DB_WARNING;
+                break;
+        }
+
+        header.status = (int32_t)db_res;
+        header.count = (uint32_t)out_count;
+
+        size_t payload_size = (size_t)out_count * sizeof(user_data_t);
+        size_t total_response_size = sizeof(ipc_response_header_t) + payload_size;
+
+        if(ctx->tx_bytes + total_response_size <= TX_BUFFER_SIZE){
+            memcpy(ctx->tx_buffer + ctx->tx_bytes, &header, sizeof(ipc_response_header_t));
+            ctx->tx_bytes += sizeof(ipc_response_header_t);
+
+            if(out_count > 0 && db_res != DB_CRITICAL_ERROR){
+                memcpy(ctx->tx_buffer + ctx->tx_bytes, out_users, payload_size);
+                ctx->tx_bytes += payload_size;
+            }
+        }else{
+            fprintf(stderr, "Error: TX buffer limit reached.\n");
             break;
         }
 
-        case OP_EDIT:
-            db_res = db_edit_user(proto->id, proto->full_name, proto->email, proto->target_level);
-            break;
-
-        case OP_DELETE:
-            db_res = db_delete_user(proto->id);
-            break;
-
-        default:
-            fprintf(stderr, "Warning: Invalid opcode received: %d\n", proto->op_code);
-            db_res = DB_WARNING;
-            break;
-    }
-
-    ctx->tx_buffer[0] = (uint8_t)db_res;
-    ctx->tx_bytes = 1;
-    ctx->tx_offset = 0;
-
-    ctx->rx_bytes -= sizeof(user_protocol_t);
-    if (ctx->rx_bytes > 0) {
-        memmove(ctx->rx_buffer, ctx->rx_buffer + sizeof(user_protocol_t), ctx->rx_bytes);
+        ctx->rx_bytes -= sizeof(user_protocol_t);
+        if(ctx->rx_bytes > 0){
+            memmove(ctx->rx_buffer, ctx->rx_buffer + sizeof(user_protocol_t), ctx->rx_bytes);
+        }
     }
 
     handle_client_write(epoll_fd, ctx);
@@ -337,25 +367,24 @@ ipc_status_t ipc_server_start(const ipc_config_t *ipc_config, const db_config_t 
                 handle_accept(epoll_fd, server_fd);
             }else{
                 client_context_t *ctx = (client_context_t *)events[i].data.ptr;
-                handle_client_data(epoll_fd, ctx);
+                uint32_t evs = events[i].events;
+
+                if(evs & (EPOLLRDHUP | EPOLLHUP | EPOLLERR)){
+                    epoll_ctl(epoll_fd, EPOLL_CTL_DEL, ctx->fd, NULL);
+                    client_destroy(ctx);
+                    continue;
+                }
+
+                if(evs & EPOLLIN) handle_client_data(epoll_fd, ctx);
+
+                if(evs & EPOLLOUT) handle_client_write(epoll_fd, ctx);
             }
         }
     }
 
-    if(epoll_fd >= 0){
-        close(epoll_fd);
-        epoll_fd = -1;
-    }
-
-    if(server_fd >= 0){
-        close(server_fd);
-        server_fd = -1;
-    }
-
-    if(socket_path){
-        unlink(socket_path);
-        socket_path = NULL;
-    }
+    if (epoll_fd >= 0) close(epoll_fd);
+    if (server_fd >= 0) close(server_fd);
+    if (socket_path) unlink(socket_path);
 
     return IPC_SUCCESS;
 }
