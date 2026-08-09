@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/epoll.h>
+#include <sys/stat.h>
 
 #include "ipc_server.h"
 #include "../protocol.h"
@@ -75,6 +76,8 @@ static int bind_socket(const char *socket_path, int max_connections){
         close(server_fd);
         return -1;
     }
+
+    if (chmod(socket_path, 0660) < 0) perror("warning: chmod failed on socket");
 
     if(set_nonblocking(server_fd) < 0){
         close(server_fd);
@@ -196,10 +199,43 @@ static void handle_client_write(int epoll_fd, client_context_t *ctx) {
     }
 }
 
-static void parse_and_execute_command(int epoll_fd, client_context_t *ctx){
+static void parse_and_execute_commands(int epoll_fd, client_context_t *ctx, const char *auth_token) {
+    
+    if(!ctx->is_authenticated){
+        if (ctx->rx_bytes < sizeof(auth_protocol_t)) return;
+
+        const auth_protocol_t *auth = (const auth_protocol_t *)ctx->rx_buffer;
+        ipc_response_header_t header = {0};
+
+        if(auth->op_code == OP_AUTH && strncmp(auth->token, auth_token, sizeof(auth->token)) == 0) {
+            ctx->is_authenticated = true;
+            header.status = DB_SUCCESS;
+        }else{
+            fprintf(stderr, "Warning: Auth failed on fd %d. Closing connection.\n", ctx->fd);
+            header.status = DB_CRITICAL_ERROR;
+        }
+
+        header.count = 0;
+        
+        memcpy(ctx->tx_buffer + ctx->tx_bytes, &header, sizeof(ipc_response_header_t));
+        ctx->tx_bytes += sizeof(ipc_response_header_t);
+
+        ctx->rx_bytes -= sizeof(auth_protocol_t);
+        if(ctx->rx_bytes > 0){
+            memmove(ctx->rx_buffer, ctx->rx_buffer + sizeof(auth_protocol_t), ctx->rx_bytes);
+        }
+
+        handle_client_write(epoll_fd, ctx);
+
+        if(!ctx->is_authenticated){
+            epoll_ctl(epoll_fd, EPOLL_CTL_DEL, ctx->fd, NULL);
+            client_destroy(ctx);
+        }
+
+        return;
+    }
 
     while(ctx->rx_bytes >= sizeof(user_protocol_t)){
-
         const user_protocol_t *proto = (const user_protocol_t *)ctx->rx_buffer;
         db_status_t db_res = DB_CRITICAL_ERROR;
         ipc_response_header_t header = {0};
@@ -212,13 +248,13 @@ static void parse_and_execute_command(int epoll_fd, client_context_t *ctx){
                 db_res = db_insert_user(proto);
                 break;
 
-            case OP_FIND:
+            case OP_FIND: {
                 const char *search_term = proto->full_name;
                 const char *last_name = (proto->id > 0) ? proto->full_name : NULL;
                 int last_id = (int)proto->id;
-
                 db_res = db_find_user(out_users, &out_count, search_term, last_name, last_id);
                 break;
+            }
 
             case OP_EDIT:
                 db_res = db_edit_user(proto->id, proto->full_name, proto->email, proto->target_level);
@@ -262,7 +298,7 @@ static void parse_and_execute_command(int epoll_fd, client_context_t *ctx){
     handle_client_write(epoll_fd, ctx);
 }
 
-static void handle_client_data(int epoll_fd, client_context_t *ctx){
+static void handle_client_data(int epoll_fd, client_context_t *ctx, const char *auth_token) {
 
     while(1){
         size_t free_space = RX_BUFFER_SIZE - ctx->rx_bytes;
@@ -292,12 +328,10 @@ static void handle_client_data(int epoll_fd, client_context_t *ctx){
             return;
         }
 
-        //Handshake token
-
         ctx->rx_bytes += (size_t)bytes_read;
     }
 
-    parse_and_execute_command(epoll_fd, ctx);
+    parse_and_execute_commands(epoll_fd, ctx, auth_token);
 }
 
 ipc_status_t ipc_server_start(const ipc_config_t *ipc_config, const db_config_t *db_config){
@@ -306,9 +340,14 @@ ipc_status_t ipc_server_start(const ipc_config_t *ipc_config, const db_config_t 
 
     if(ipc_config == NULL || db_config == NULL) return IPC_ERROR_SOCKET;
 
+    if(ipc_config->auth_token == NULL || ipc_config->auth_token[0] == '\0'){
+        fprintf(stderr, "IPC Auth Token is missing. Refusing to start without security token.\n");
+        return IPC_ERROR_SOCKET;
+    }
+
+    const char *auth_token = ipc_config->auth_token;
     const char *socket_path = (ipc_config->socket_path != NULL) ? ipc_config->socket_path : DEFAULT_SOCKET_PATH;
     int max_conn = (ipc_config->max_connections > 0) ? ipc_config->max_connections : DEFAULT_MAX_CONN;
-    //const char *auth_token = (ipc_config->auth_token != NULL) ? ipc_config->auth_token : DEFAULT_AUTH_TOKEN;
     int timeout = (ipc_config->timeout_ms > 0) ? ipc_config->timeout_ms : DEFAULT_TIMEOUT_MS;
 
     int server_fd = bind_socket(socket_path, max_conn);
@@ -375,7 +414,7 @@ ipc_status_t ipc_server_start(const ipc_config_t *ipc_config, const db_config_t 
                     continue;
                 }
 
-                if(evs & EPOLLIN) handle_client_data(epoll_fd, ctx);
+                if(evs & EPOLLIN) handle_client_data(epoll_fd, ctx, auth_token);
 
                 if(evs & EPOLLOUT) handle_client_write(epoll_fd, ctx);
             }

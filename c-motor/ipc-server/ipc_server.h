@@ -9,7 +9,6 @@
 #include "../database/config.h"
 
 #define DEFAULT_SOCKET_PATH "/tmp/coreauth.sock"
-#define DEFAULT_AUTH_TOKEN "coreauth_secret_token"
 #define DEFAULT_MAX_CONN 10
 #define DEFAULT_TIMEOUT_MS 6000
 
