@@ -12,7 +12,7 @@ typedef struct __attribute__((packed)) {
     uint8_t target_level;
 } user_protocol_t;
 
-typedef struct {
+typedef struct __attribute__((packed)) {
     uint32_t id;
     char full_name[100];
     char email[100];

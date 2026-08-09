@@ -14,7 +14,7 @@ export DB_PASS
 
 all: $(TARGET)
 
-$(TARGET): tests/main_test.c database/db.c database/config.c database/db_utils.c tests/stress_test.c
+$(TARGET): main.c database/db.c database/config.c database/db_utils.c tests/stress_test.c ipc-server/ipc_server.c
 	@$(CC) $(CFLAGS) $^ -o $(TARGET) $(LIBS)
 
 run: all

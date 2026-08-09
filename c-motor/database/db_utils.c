@@ -83,7 +83,7 @@ void db_init(const db_config_t *config){
         exit(1);
     }
 
-    db_stmts.insert_user = prepare_query("INSERT INTO users(name, email) VALUES(?, ?)");
+    db_stmts.insert_user = prepare_query("INSERT INTO users(name, email, access_level) VALUES(?, ?, ?)");
     db_stmts.find_user = prepare_query("SELECT id, name, email, access_level FROM users "
                                          "WHERE name LIKE ? AND (name > ? OR (name = ? AND id > ?)) "
                                          "ORDER BY name ASC, id ASC LIMIT 50");
