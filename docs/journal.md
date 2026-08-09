@@ -245,3 +245,12 @@ Para assegurar a transmissão de respostas e dados ao cliente sem causar travame
 
 **Solução:**
 * **Gerenciamento de Buffer de Transmissão e I/O Não Bloqueante (`ipc_server.c`):** Desenvolvimento da rotina `handle_client_write`. A função é responsável por descarregar os bytes acumulados no buffer de escrita do cliente (`tx_buffer`) diretamente para o *file descriptor* (`ctx->fd`). A transmissão ocorre através de um laço executando a syscall `write` com controle contínuo de deslocamento (`tx_offset`), garantindo o envio parcial de dados caso o buffer do Kernel atinja o limite e retorne `EAGAIN` ou `EWOULDBLOCK`. O algoritmo trata interrupções por sinais (`EINTR`) reapresentando a chamada e realiza o encerramento gracioso do contexto via `client_destroy` e remoção do *epoll* (`EPOLL_CTL_DEL`) em caso de erros críticos de I/O (`bytes_written < 0`). Ao concluir a entrega de todos os bytes (`tx_offset == tx_bytes`), os ponteiros de controle do buffer são zerados sem alocação dinâmica.
+
+---
+
+### Registro 26: Desempacotamento de Protocolo e Roteamento de Comandos (`ipc_server.c`)
+
+Para realizar a desserialização atômica de pacotes recebidos pela rede e direcionar o processamento do CRUD para a camada do MySQL, implementou-se a função interna `parse_and_execute_command`.
+
+**Solução:**
+* **Parsing por Deslocamento e Execução de Comandos (`ipc_server.c`):** Desenvolvimento da rotina `parse_and_execute_command`. A função faz o *casting* direto do ponteiro do buffer de recepção (`rx_buffer`) para a estrutura `user_protocol_t` sem realizar cópias adicionais de memória (mecanismo *zero-copy*). Com base no campo `op_code`, um laço condicional (*switch*) mapeia e executa a respectiva instrução do banco de dados (`db_insert_user`, `db_find_user`, `db_edit_user` ou `db_delete_user`), gravando o byte de status resultante diretamente no início do buffer de transmissão (`tx_buffer`). O algoritmo ajusta o deslocamento do `rx_buffer` via `memmove` para descartar o pacote processado e, ao final, invoca a rotina `handle_client_write` para efetuar o envio assíncrono da resposta ao cliente.

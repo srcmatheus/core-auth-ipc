@@ -12,6 +12,8 @@
 #include <sys/epoll.h>
 
 #include "ipc_server.h"
+#include "../protocol.h"
+#include "../database/db.h"
 #include "../database/db_utils.h"
 
 #define MAX_EVENTS 64
@@ -182,6 +184,52 @@ static void handle_client_write(int epoll_fd, client_context_t *ctx) {
         ctx->tx_bytes = 0;
         ctx->tx_offset = 0;
     }
+}
+
+static void parse_and_execute_command(int epoll_fd, client_context_t *ctx){
+
+    if (ctx == NULL || ctx->rx_bytes < sizeof(user_protocol_t)) return;
+
+    const user_protocol_t *proto = (const user_protocol_t *)ctx->rx_buffer;
+    db_status_t db_res = DB_CRITICAL_ERROR;
+
+    switch(proto->op_code){
+        case OP_INSERT:
+            db_res = db_insert_user(proto);
+            break;
+
+        case OP_FIND: {
+            user_data_t out_users[50] = {0};
+            int out_count = 0;
+            
+            db_res = db_find_user(out_users, &out_count, proto->full_name, "", 0);
+            break;
+        }
+
+        case OP_EDIT:
+            db_res = db_edit_user(proto->id, proto->full_name, proto->email, proto->target_level);
+            break;
+
+        case OP_DELETE:
+            db_res = db_delete_user(proto->id);
+            break;
+
+        default:
+            fprintf(stderr, "Warning: Invalid opcode received: %d\n", proto->op_code);
+            db_res = DB_WARNING;
+            break;
+    }
+
+    ctx->tx_buffer[0] = (uint8_t)db_res;
+    ctx->tx_bytes = 1;
+    ctx->tx_offset = 0;
+
+    ctx->rx_bytes -= sizeof(user_protocol_t);
+    if (ctx->rx_bytes > 0) {
+        memmove(ctx->rx_buffer, ctx->rx_buffer + sizeof(user_protocol_t), ctx->rx_bytes);
+    }
+
+    handle_client_write(epoll_fd, ctx);
 }
 
 static void handle_client_data(int epoll_fd, client_context_t *ctx){

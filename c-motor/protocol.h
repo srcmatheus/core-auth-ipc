@@ -19,4 +19,11 @@ typedef struct {
     uint8_t access_level;
 } user_data_t;
 
+typedef enum{
+    OP_INSERT = 1,
+    OP_FIND = 2,
+    OP_EDIT = 3,
+    OP_DELETE = 4
+} ipc_op_code_t;
+
 #endif
