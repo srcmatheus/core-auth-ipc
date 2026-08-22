@@ -71,13 +71,15 @@ static int bind_socket(const char *socket_path, int max_connections){
     addr.sun_family = AF_UNIX;
     strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
 
-    if(bind(server_fd, (struct sockaddr *)&addr, sizeof(struct sockaddr_un)) == -1){
+    mode_t old_mask = umask(0117);
+    int bind_res = bind(server_fd, (struct sockaddr *)&addr, sizeof(struct sockaddr_un));
+    umask(old_mask);
+
+    if(bind_res == -1){
         perror("socket bind failed");
         close(server_fd);
         return -1;
     }
-
-    if (chmod(socket_path, 0660) < 0) perror("warning: chmod failed on socket");
 
     if(set_nonblocking(server_fd) < 0){
         close(server_fd);
