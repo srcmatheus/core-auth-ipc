@@ -286,3 +286,12 @@ Identificação de uma janela de concorrência (*Time-of-Check to Time-of-Use* -
 * **Isolamento de Diretório de Controle (`ipc_server.h`):** Alteração da macro `DEFAULT_SOCKET_PATH` de `/tmp/coreauth.sock` para `/run/coreauth/coreauth.sock`, removendo o socket de locais permissivos e isolando-o em um diretório dedicado ao serviço.
 * **Criação Atômica de Permissões via `umask` (`ipc_server.c`):** Eliminação completa da função `chmod()`. Implementação do ajuste de `umask(0117)` estritamente antes do comando `bind()`, garantindo a criação atômica do nó do socket no filesystem já com a permissão correta (`0660`), restaurando o `umask` original imediatamente após a chamada.
 * **Delegação da Gestão de Runtime ao Init (`ipc_server.c`):** Remoção das chamadas manuais a `mkdir` no código C. A criação e o controle do diretório `/run/coreauth` com permissões restritas (`0750`) passam a ser delegados à camada de init (systemd via `RuntimeDirectory` e `RuntimeDirectoryMode`), permitindo a execução segura do daemon sob usuários restritos.
+
+---
+
+### Registro 30: Sanitização Severa de Payloads IPC e Mitigação de Buffer Over-read (`ipc_server.c`)
+
+Identificação de uma vulnerabilidade crítica de leitura fora dos limites de memória (*Buffer Over-read*) no processamento de payloads IPC. As estruturas de comunicação (`user_protocol_t`) possuem arrays estáticos de caracteres (`full_name` e `email` com 100 bytes cada). Caso um cliente envie pacotes preenchendo inteiramente a capacidade desses buffers sem o caractere nulo de encerramento (`\0`), as funções subsequentes que assumem strings delimitadas por nulo (como `strlen` e `snprintf` na preparação de *Prepared Statements* do banco de dados) varrem a memória contígua além do buffer, podendo ocasionar vazamento de dados (*Memory Leak via OOB Read*) ou falha de segmentação (*Segmentation Fault*).
+
+**Solução:**
+* **Garantia de Terminação Nula em Payloads (`ipc_server.c`):** Aplicação de sanitização severa na rotina `parse_and_execute_commands` imediatamente após o *casting* do buffer de recepção para a estrutura `user_protocol_t *proto`. Forçou-se o truncamento explícito dos arrays de caracteres definindo o último byte de cada buffer como nulo (`proto->full_name[sizeof(proto->full_name) - 1] = '\0'` e `proto->email[sizeof(proto->email) - 1] = '\0'`) antes do repasse dos dados a qualquer camada do banco de dados.

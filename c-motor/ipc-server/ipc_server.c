@@ -238,7 +238,10 @@ static void parse_and_execute_commands(int epoll_fd, client_context_t *ctx, cons
     }
 
     while(ctx->rx_bytes >= sizeof(user_protocol_t)){
-        const user_protocol_t *proto = (const user_protocol_t *)ctx->rx_buffer;
+        user_protocol_t *proto = (user_protocol_t *)ctx->rx_buffer;
+        proto->full_name[sizeof(proto->full_name) - 1] = '\0';
+        proto->email[sizeof(proto->email) - 1] = '\0';
+
         db_status_t db_res = DB_CRITICAL_ERROR;
         ipc_response_header_t header = {0};
 
